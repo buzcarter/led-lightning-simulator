@@ -112,6 +112,30 @@ const uint8_t LED_Y[NUM_LEDS] PROGMEM = { ... };
 
 Positions are normalised to 0–255 across the long axis, which keeps distances isotropic. Each segment also records its own root point (`ox`, `oy`). This is the payload that makes the SVG matter to the microcontroller instead of being just a preview toy.
 
+### 6. Colour: the hue lives in the afterglow
+
+What makes this read as lightning is not the colour, it is the **heat axis** — the channel is white-hot at the stroke and cools to a tint as it fades. So the colour model is a ramp between two endpoints, and `heat` walks between them:
+
+```c
+leds[i].r = qadd8(leds[i].r, scale8(mix8(coolC.r, hotC.r, heat), bright));
+```
+
+`coolC` is the fully saturated `HUE` at `SAT`. `hotC` is the same hue at `HOT_SAT`, which stays low so the return stroke keeps a near-white core. That constraint is the whole trick: push `HOT_SAT` up and the effect stops looking like lightning and starts looking like a coloured tube light. Hue belongs in the decay, not the strike.
+
+Both endpoints are resolved **once per frame**, not per pixel, so the per-pixel cost is three `mix8` and three `scale8` — the same as when the palette was hardcoded blue.
+
+`TRIM` compensates for the eye rather than the LED. Green sits at the peak of human luminous sensitivity, so a green flash at `MASTER` 170 reads about twice as bright as blue at 170. Starting points live in `PALETTES[]` in `config.h`:
+
+| Palette | Hue | Sat | Hot sat | Trim | Reads as |
+|---|---|---|---|---|---|
+| storm | 160 | 200 | 40 | 255 | cold blue-white |
+| tornado | 80 | 165 | 30 | 200 | sickly yellow-green — the dread is in the *low* saturation |
+| voldemort | 96 | 220 | 45 | 190 | vivid unnatural green — menace rather than dread |
+| halloween | 192 | 205 | 55 | 235 | purple |
+| red planet | 8 | 235 | 60 | 245 | mars dust |
+
+The bench runs FastLED's own `hsv2rgb_rainbow`, transcribed, so the swatches and the preview land on the same RGB the strip will.
+
 ## Using the bench
 
 ### Controls
@@ -137,9 +161,17 @@ Four presets — Distant storm, Rolling, Direct hit, Heat lightning — are star
 
 ## Export
 
-The **Export** panel has two tabs.
+The **Export** panel emits five source files plus the layout. They are split along the line of **ownership**, not by size — which is what makes re-exporting safe:
 
-`StormCloud.ino` is a complete sketch: routing tables, coordinate tables, every tunable as a `#define`, the strike state machine, and the render loop.
+| File | Owner | Overwritten on export |
+|---|---|---|
+| `config.h` | **you** — pins, logging, palettes | never; the bench emits it as a starter only |
+| `layout.h` | generator — segments, `LED_X`/`LED_Y` | wholesale |
+| `tuning.h` | generator — animation parameters | wholesale |
+| `storm.h` | generator — the engine | wholesale |
+| `main.cpp` | generator — `setup()` / `loop()` | wholesale |
+
+Drop the four generated files into `src/` after any export; leave your `config.h` alone.
 
 `layout.json` round-trips back into the tool via **Import layout JSON**, so you can version your routing or move it between machines.
 
@@ -175,7 +207,7 @@ Roughly what it looks like:
 [storm] Fork - left        170    18   fork  off Bolt - left at 54%
 [storm] strike  Bolt - centre   slot=0 leader=180ms strokes=1 forkMask=0x01 total=1481ms
 [storm]   done  Bolt - centre   after 1482ms
-[storm] 412 fps  active=0  peak draw=3180 mA  next strike in 2204 ms
+[storm] 98 fps  active=0  peak draw=3180 mA  next strike in 2204 ms
 ```
 
 That peak draw figure comes from FastLED's own `calculate_unscaled_power_mW`, so it is the number to watch against whatever supply you end up using — see below.
@@ -212,7 +244,7 @@ pio run -t upload       # flash
 pio device monitor      # watch the log
 ```
 
-`platformio.ini` targets `esp32dev`. Re-exporting from the bench overwrites `src/main.cpp`, so anything you hand-edit there — `LED_PIN`, in particular, which the generator always emits as `6` — has to be re-applied afterwards.
+`platformio.ini` targets `esp32dev`. Re-exporting overwrites four of the five source files, but never `config.h` — so your pin choice, logging settings and palettes survive.
 
 ## Files
 
@@ -222,6 +254,10 @@ lightning-simulator/
 ├── README.md         this file
 ├── platformio.ini    ESP32 build config
 └── src/
-    ├── main.cpp      exported sketch
+    ├── config.h      YOURS: pins, logging, palettes — never regenerated
+    ├── layout.h      generated: segment table, pixel coordinates
+    ├── tuning.h      generated: animation parameters and palette
+    ├── storm.h       generated: the engine
+    ├── main.cpp      generated: setup() and loop()
     └── layout.json   exported routing, re-importable into the bench
 ```

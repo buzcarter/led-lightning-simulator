@@ -228,6 +228,12 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--volt);box-shadow:
 input[type=range]:hover::-moz-range-thumb{background:var(--volt)}
 
 .presets{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:13px}
+.ramp{display:flex;align-items:center;gap:8px;margin:0 0 13px}
+.ramp .sw{width:22px;height:22px;border-radius:3px;border:1px solid var(--line);flex:none}
+.ramp .rampline{flex:1;height:3px;border-radius:2px;
+  background:linear-gradient(90deg,var(--ink),var(--volt-deep))}
+.ramp .ramplbl{font-family:var(--mono);font-size:9.5px;color:var(--faint);
+  letter-spacing:.07em;text-transform:uppercase}
 .presets .btn{padding:4px 9px;font-size:11px}
 
 .toggle{display:flex;align-items:center;gap:8px;margin-bottom:11px}
@@ -344,6 +350,20 @@ textarea.paste{
       <div class="body"><div class="grid" id="gCloud"></div></div>
     </details>
 
+    <details open>
+      <summary>Colour <span class="note">exported</span></summary>
+      <div class="body">
+        <div class="presets" id="palettes"></div>
+        <div class="ramp">
+          <span class="sw" id="swHot"></span>
+          <span class="rampline"></span>
+          <span class="sw" id="swCool"></span>
+          <span class="ramplbl">peak → afterglow</span>
+        </div>
+        <div class="grid" id="gColour"></div>
+      </div>
+    </details>
+
     <details>
       <summary>Optics <span class="note">preview only</span></summary>
       <div class="body">
@@ -355,11 +375,8 @@ textarea.paste{
     <details>
       <summary>Export <span class="note">Arduino / FastLED</span></summary>
       <div class="body">
-        <p class="blurb">The sketch below is a direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same envelope. 300 px needs an ESP32, Teensy or RP2040; an AVR Nano runs out of RAM.</p>
-        <div class="tabs">
-          <button class="btn on" data-tab="ino">StormCloud.ino</button>
-          <button class="btn" data-tab="json">layout.json</button>
-        </div>
+        <p class="blurb">A direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same <code>hsv2rgb_rainbow</code>. Drop these in <code>src/</code>. Only <code>config.h</code> is yours to keep: the other four are overwritten every export.</p>
+        <div class="tabs" id="tabs"></div>
         <pre class="code" id="codeOut"></pre>
         <div class="exp-acts">
           <button class="btn tiny" id="copyCode">Copy</button>
@@ -405,6 +422,64 @@ const scale8 = (i, s) => ((i * s) >> 8) & 0xFF;
 const qadd8  = (a, b) => Math.min(255, a + b);
 const qsub8  = (a, b) => Math.max(0, a - b);
 const mix8   = (a, b, amt) => (a + (((b - a) * amt) >> 8)) & 0xFF;
+const scale8_video = (i, s) => (((i * s) >> 8) + ((i && s) ? 1 : 0)) & 0xFF;
+
+/* hsv2rgb_rainbow, transcribed from FastLED. Called twice per frame rather
+   than per pixel, so the cost is irrelevant and the preview lands on the
+   same RGB the hardware will. */
+function hsv2rgb_rainbow(hue, sat, val){
+  hue &= 0xFF;
+  const offset8 = (hue & 0x1F) << 3;
+  const third = scale8(offset8, 85);            // 256/3
+  let r, g, b, tt;
+  if (!(hue & 0x80)){
+    if (!(hue & 0x40)){
+      if (!(hue & 0x20)){ r = 255 - third;      g = third;       b = 0; }
+      else              { r = 171;              g = 85 + third;  b = 0; }
+    } else {
+      if (!(hue & 0x20)){ tt = scale8(offset8, 170);
+                          r = 171 - tt;         g = 170 + third; b = 0; }
+      else              { r = 0;                g = 255 - third; b = third; }
+    }
+  } else {
+    if (!(hue & 0x40)){
+      if (!(hue & 0x20)){ tt = scale8(offset8, 170);
+                          r = 0;                g = 171 - tt;    b = 85 + tt; }
+      else              { r = third;            g = 0;           b = 255 - third; }
+    } else {
+      if (!(hue & 0x20)){ r = 85 + third;       g = 0;           b = 171 - third; }
+      else              { r = 170 + third;      g = 0;           b = 85 - third; }
+    }
+  }
+  if (sat !== 255){
+    if (sat === 0){ r = 255; g = 255; b = 255; }
+    else {
+      const desat = scale8_video(255 - sat, 255 - sat);
+      const satscale = 255 - desat;
+      if (r) r = scale8(r, satscale) + 1;
+      if (g) g = scale8(g, satscale) + 1;
+      if (b) b = scale8(b, satscale) + 1;
+      r += desat; g += desat; b += desat;
+    }
+  }
+  if (val !== 255){
+    const v = scale8_video(val, val);
+    if (v === 0){ r = 0; g = 0; b = 0; }
+    else {
+      if (r) r = scale8(r, v) + 1;
+      if (g) g = scale8(g, v) + 1;
+      if (b) b = scale8(b, v) + 1;
+    }
+  }
+  return [r & 0xFF, g & 0xFF, b & 0xFF];
+}
+
+/* Both ends of the heat ramp, resolved once per frame. */
+let coolC = [40, 110, 255], hotC = [255, 255, 255];
+function resolvePalette(){
+  coolC = hsv2rgb_rainbow(P.hue, P.sat, 255);
+  hotC  = hsv2rgb_rainbow(P.hue, P.hotSat, 255);
+}
 
 let rand16seed = 0x1337;
 function random16(){ rand16seed = (Math.imul(rand16seed, 2053) + 13849) & 0xFFFF; return rand16seed; }
@@ -453,8 +528,11 @@ const SPEC = [
   ['gCloud','cloudMs',    'Cloud decay',   80, 2000,20, 'ms'],
   ['gCloud','rumble',     'Rumble depth',    0,  180, 1, ''],
 
-  ['gLook','master','Master brightness', 8, 255, 1, ''],
-  ['gLook','tint',  'Cool tint',         0, 255, 1, ''],
+  ['gColour','hue',    'Hue',            0, 255, 1, ''],
+  ['gColour','sat',    'Afterglow sat',  0, 255, 1, ''],
+  ['gColour','hotSat', 'Peak sat',       0, 120, 1, ''],
+  ['gColour','trim',   'Palette trim',  40, 255, 1, ''],
+  ['gColour','master', 'Master bright',  8, 255, 1, ''],
   ['gLook','dotSize','Dot size',         4,  46, 1, 'px'],
   ['gLook','bloom', 'Bloom',             0, 200, 1, '%'],
 ];
@@ -466,22 +544,34 @@ const P = {
   rgapMin:30, rgapMax:140, partial:110, glowMs:330,
   forkDim:185, forkFollow:140,
   ambLevel:34, ambSpeed:14, cloudFlash:205, cloudSpread:150, cloudMs:540, rumble:70,
-  master:210, tint:150, dotSize:12, bloom:80,
+  master:210, hue:160, sat:200, hotSat:40, trim:255, dotSize:12, bloom:80,
+};
+
+/* Hue lives in the afterglow: HOT_SAT stays low so the return stroke keeps a
+   white core and still reads as hot. TRIM compensates for the eye rather than
+   the LED — green sits at the peak of luminous sensitivity, so a green flash
+   at master 170 feels about twice as bright as blue at 170. */
+const PALETTES = {
+  'Storm':      { hue:160, sat:200, hotSat:40, trim:255 },
+  'Tornado':    { hue: 80, sat:165, hotSat:30, trim:200 },
+  'Voldemort':  { hue: 96, sat:220, hotSat:45, trim:190 },
+  'Halloween':  { hue:192, sat:205, hotSat:55, trim:235 },
+  'Red planet': { hue:  8, sat:235, hotSat:60, trim:245 },
 };
 
 const PRESETS = {
   'Distant storm': { forkDim:150, forkFollow:90, gapMin:2600, gapMax:8000, leadMin:60, leadMax:200, trail:14, strkMin:1, strkMax:2,
                      durMin:20, durMax:60, glowMs:520, cloudFlash:150, cloudSpread:190, cloudMs:900,
-                     ambLevel:22, master:150, tint:200, partial:60, rumble:110 },
+                     ambLevel:22, master:150, partial:60, rumble:110 },
   'Rolling':       { forkDim:185, forkFollow:140, gapMin:900, gapMax:4200, leadMin:22, leadMax:88, trail:7, strkMin:1, strkMax:4,
                      durMin:12, durMax:46, glowMs:330, cloudFlash:205, cloudSpread:150, cloudMs:540,
-                     ambLevel:34, master:210, tint:150, partial:110, rumble:70 },
+                     ambLevel:34, master:210, partial:110, rumble:70 },
   'Direct hit':    { forkDim:220, forkFollow:200, gapMin:280, gapMax:1500, leadMin:8, leadMax:26, trail:4, strkMin:2, strkMax:6,
                      durMin:8, durMax:30, rgapMin:16, rgapMax:70, glowMs:200, cloudFlash:255,
-                     cloudSpread:60, cloudMs:300, ambLevel:44, master:255, tint:60, partial:190, rumble:30 },
+                     cloudSpread:60, cloudMs:300, ambLevel:44, master:255, partial:190, rumble:30 },
   'Heat lightning':{ forkDim:120, forkFollow:40, gapMin:1400, gapMax:5200, leadMin:120, leadMax:240, trail:34, strkMin:1, strkMax:1,
                      durMin:60, durMax:150, glowMs:700, cloudFlash:255, cloudSpread:230, cloudMs:1300,
-                     ambLevel:52, master:170, tint:225, partial:0, rumble:150 },
+                     ambLevel:52, master:170, partial:0, rumble:150 },
 };
 
 /* ── layout ──────────────────────────────────────────────────────── */
@@ -771,12 +861,10 @@ function addLed(i, bright, heat, pos, len, frame){
     bright = qsub8(bright, scale8(bright, scale8(t, P.taper)));
     if (!bright) return;
   }
-  // cool tint: heat 255 = white hot, heat 0 = the blue afterglow
-  const cr = 255 - scale8(215, P.tint);
-  const cg = 255 - scale8(145, P.tint);
-  const r = scale8(mix8(cr, 255, heat), bright);
-  const g = scale8(mix8(cg, 255, heat), bright);
-  const b = scale8(255, bright);
+  // heat 255 = the white-hot peak, heat 0 = the fully saturated afterglow
+  const r = scale8(mix8(coolC[0], hotC[0], heat), bright);
+  const g = scale8(mix8(coolC[1], hotC[1], heat), bright);
+  const b = scale8(mix8(coolC[2], hotC[2], heat), bright);
   const k = i * 3;
   leds[k]   = qadd8(leds[k], r);
   leds[k+1] = qadd8(leds[k+1], g);
@@ -801,6 +889,7 @@ let frameNo = 0;
 function updateSim(now){
   leds.fill(0);
   frameNo++;
+  resolvePalette();
   renderAmbient(now);
 
   if (storming && now >= nextStrikeAt){
@@ -820,8 +909,9 @@ function updateSim(now){
   for (const s of strikes) renderStrike(s, now, frameNo);
   strikes = strikes.filter(s => now - s.t0 <= s.total + 40);
 
-  if (P.master < 255){
-    for (let i = 0; i < leds.length; i++) leds[i] = scale8(leds[i], P.master);
+  const bright = scale8(P.master, P.trim);      // TRIM pulls back the eye-sensitive hues
+  if (bright < 255){
+    for (let i = 0; i < leds.length; i++) leds[i] = scale8(leds[i], bright);
   }
 }
 
@@ -1093,6 +1183,12 @@ function buildParams(){
     wrap.append(lab, inp);
     groups[g].append(wrap);
   }
+  const pal = document.getElementById('palettes');
+  for (const name of Object.keys(PALETTES)){
+    const b = el('button', 'btn', name);
+    b.addEventListener('click', () => { Object.assign(P, PALETTES[name]); syncParamUI(); onParamChange(); });
+    pal.append(b);
+  }
   const pr = document.getElementById('presets');
   for (const name of Object.keys(PRESETS)){
     const b = el('button', 'btn', name);
@@ -1113,7 +1209,21 @@ function applyPreset(name){
   Object.assign(P, PRESETS[name]);
   syncParamUI(); onParamChange();
 }
-function onParamChange(){ buildExport(); save(); }
+function onParamChange(){ paintSwatches(); buildExport(); save(); }
+
+function paintSwatches(){
+  const cool = hsv2rgb_rainbow(P.hue, P.sat, 255);
+  const hot  = hsv2rgb_rainbow(P.hue, P.hotSat, 255);
+  const hex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+  const set = (id, c, lbl) => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    node.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+    node.title = `${lbl}  ${hex(c)}`;
+  };
+  set('swHot',  hot,  'peak');
+  set('swCool', cool, 'afterglow');
+}
 
 /* routing list */
 const runsEl = document.getElementById('runs');
@@ -1353,19 +1463,18 @@ document.getElementById('resetLayout').addEventListener('click', () => {
 });
 
 /* ══ export ══════════════════════════════════════════════════════ */
-let exportTab = 'ino';
-const codeOut = document.getElementById('codeOut');
-document.querySelectorAll('.tabs .btn').forEach(b => {
-  b.addEventListener('click', () => {
-    exportTab = b.dataset.tab;
-    document.querySelectorAll('.tabs .btn').forEach(x => x.classList.toggle('on', x === b));
-    buildExport();
-  });
-});
+/* ── export ──────────────────────────────────────────────────────
+   Five files, split along the line of ownership: layout.h, tuning.h,
+   storm.h and main.cpp are regenerated wholesale, so anything you hand-edit
+   in them is lost on the next export. config.h is emitted here only as a
+   starter — on disk it belongs to you, and the bench never overwrites it. */
+const SEG_NAME_LEN = 20;
+const cName = t => String(t).replace(/[^\x20-\x7E]/g, '-').replace(/["\\]/g, '')
+                            .replace(/\s+/g, ' ').trim().slice(0, SEG_NAME_LEN - 1);
 
 function ident(name, i){
-  const s = name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  return 'SEG_' + (s || 'RUN') + '_' + i;
+  const t = name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return 'SEG_' + (t || 'RUN') + '_' + i;
 }
 function tableU8(arr, n, perLine){
   const out = [];
@@ -1384,106 +1493,38 @@ function layoutJSON(){
   }, null, 2);
 }
 
-function buildExport(){
-  if (exportTab === 'json'){ codeOut.textContent = layoutJSON(); return; }
-  // run names reach the firmware for logging, so fold them to plain ASCII
-  const SEG_NAME_LEN = 20;
-  const cName = t => String(t).replace(/[^\x20-\x7E]/g, '-').replace(/["\\]/g, '')
-                              .replace(/\s+/g, ' ').trim().slice(0, SEG_NAME_LEN - 1);
-  const nameW = Math.max(12, ...runs.map(r => cName(r.name).length + 3));
-  const segLines = runs.map((r, i) =>
-    `  { ${('"' + cName(r.name) + '",').padEnd(nameW)} ${String(r.start).padStart(3)}, ${String(r.drawn || 0).padStart(3)}, ${r.role === 'bolt' ? 1 : 0}, ` +
-    `${String(r.nOX || 0).padStart(3)}, ${String(r.nOY || 0).padStart(3)}, ` +
-    `${String(r.parentIdx == null ? -1 : r.parentIdx).padStart(2)}, ${String(r.forkAt == null ? 128 : r.forkAt).padStart(3)} },` +
-    `${r.parentIdx >= 0 ? '  // forks off ' + cName(runs[r.parentIdx].name) : ''}`).join('\n');
-  const defs = runs.map((r, i) => `#define ${ident(r.name, i).padEnd(22)} ${i}`).join('\n');
+const FILE_CONFIG_H = `/* ─────────────────────────────────────────────────────────────
+   config.h — YOURS. Bolt Bench never overwrites this file.
 
-  codeOut.textContent = `/* ─────────────────────────────────────────────────────────────
-   StormCloud — generated by Bolt Bench
-   ${runs.length} runs · ${usedLeds}/${NUM_LEDS} pixels allocated
-   ${runs.filter(r => r.role === 'bolt' && r.parentIdx < 0).length} root channels, ${runs.filter(r => r.parentIdx >= 0).length} forks
-
-   The colour math here is the same uint8 arithmetic the bench
-   previews, and random16() is FastLED's own LCG, so seeding the
-   same value reproduces the storm you tuned.
-
-   300 px of state needs headroom: ESP32 / Teensy / RP2040.
+   Pins, board wiring, logging and palettes live here so that
+   re-exporting from the bench (which replaces layout.h, tuning.h,
+   storm.h and main.cpp wholesale) cannot clobber them.
    ───────────────────────────────────────────────────────────── */
-#include <FastLED.h>
+#pragma once
+#include <Arduino.h>
 
-#define LED_PIN      6
-#define NUM_LEDS     ${NUM_LEDS}
+/* ── strip ──────────────────────────────────────────────────── */
+/* GPIO2 is a strapping pin, but strapping pins are only sampled at reset —
+   after boot it is an ordinary output, which is why this works. The one
+   risk is something holding it high during reset and blocking boot.
+   If you ever need to move it: GPIO13/18/19/21/22/23/25/26/27/32/33 are
+   all clear. Avoid GPIO6-11 (SPI flash), GPIO34-39 (input only),
+   GPIO1/3 (Serial), GPIO16/17 (PSRAM on WROVER modules). */
+#define LED_PIN      GPIO_NUM_2
 #define LED_TYPE     WS2812B
 #define COLOR_ORDER  GRB
+
+/* How many strikes may overlap, and how many strokes each may have.
+   Exceeding MAX_STRIKES logs a DROPPED line rather than queueing. */
 #define MAX_STRIKES  6
 #define MAX_STROKES  6
 
-CRGB leds[NUM_LEDS];
-
-/* ── routing ────────────────────────────────────────────────── */
-#define SEG_NAME_LEN ${SEG_NAME_LEN}       // fixed array, so memcpy_P hands back a usable string
-
-struct Segment {
-  char     name[SEG_NAME_LEN];   // ASCII; folded from the bench's run names
-  uint16_t start;
-  uint16_t len;
-  uint8_t  isBolt;
-  uint8_t  ox, oy;      // channel root, normalised 0..255
-  int8_t   parent;      // -1 = root channel; otherwise the channel it forks off
-  uint8_t  forkAt;      // 0..255 along the parent, where the branch leaves
-};
-
-${defs}
-#define NUM_SEGMENTS ${runs.length}
-
-const Segment SEGMENTS[NUM_SEGMENTS] PROGMEM = {
-${segLines}
-};
-
-// pixel positions, normalised 0..255 across the long axis
-const uint8_t LED_X[NUM_LEDS] PROGMEM = {
-${tableU8(nrmX, NUM_LEDS, 20)}
-};
-const uint8_t LED_Y[NUM_LEDS] PROGMEM = {
-${tableU8(nrmY, NUM_LEDS, 20)}
-};
-
-/* ── tuning ─────────────────────────────────────────────────── */
-#define GAP_MIN       ${P.gapMin}
-#define GAP_MAX       ${P.gapMax}
-#define DBL_CHANCE    ${P.dblChance}
-#define CLUSTER_MS    ${P.clusterMs}
-#define LEAD_MIN      ${Math.min(P.leadMin, P.leadMax)}
-#define LEAD_MAX      ${Math.max(P.leadMin, P.leadMax)}
-#define TRAIL         ${P.trail}
-#define TAPER         ${P.taper}
-#define STRK_MIN      ${Math.min(P.strkMin, P.strkMax)}
-#define STRK_MAX      ${Math.max(P.strkMin, P.strkMax)}
-#define DUR_MIN       ${Math.min(P.durMin, P.durMax)}
-#define DUR_MAX       ${Math.max(P.durMin, P.durMax)}
-#define RGAP_MIN      ${Math.min(P.rgapMin, P.rgapMax)}
-#define RGAP_MAX      ${Math.max(P.rgapMin, P.rgapMax)}
-#define PARTIAL       ${P.partial}
-#define FORK_DIM      ${P.forkDim}
-#define FORK_FOLLOW   ${P.forkFollow}
-#define GLOW_MS       ${P.glowMs}
-#define AMB_LEVEL     ${P.ambLevel}
-#define AMB_SPEED     ${P.ambSpeed}
-#define CLOUD_FLASH   ${P.cloudFlash}
-#define CLOUD_SPREAD  ${P.cloudSpread}
-#define CLOUD_MS      ${P.cloudMs}
-#define RUMBLE        ${P.rumble}
-#define MASTER        ${P.master}
-#define TINT          ${P.tint}
-
 /* ── logging ────────────────────────────────────────────────── */
-/* Set STORM_LOG to 0 and every line below compiles away to nothing: no
-   Serial, no format strings in flash, no cost in the render loop. On an
-   ESP32 that is worth about 28 KB of flash.
-   Serial.printf is an ESP32 / Teensy / RP2040 core feature, which is the
-   same hardware bracket 300 px already forces you into. */
+/* 0 removes Serial, the format strings and the per-frame power
+   measurement entirely — about 28 KB of flash on an ESP32.
+   Override from platformio.ini with -DSTORM_LOG=0. */
 #ifndef STORM_LOG
-  #define STORM_LOG      1        // or set -DSTORM_LOG=0 in platformio.ini
+  #define STORM_LOG      1
 #endif
 #ifndef STORM_LOG_BAUD
   #define STORM_LOG_BAUD 115200
@@ -1497,6 +1538,53 @@ ${tableU8(nrmY, NUM_LEDS, 20)}
 #else
   #define LOG(...)  do {} while (0)
 #endif
+
+/* ── palettes ───────────────────────────────────────────────── */
+/* Starting points for HUE / SAT / HOT_SAT / TRIM in tuning.h.
+
+   Two rules learned the hard way:
+
+   Hue belongs in the afterglow. HOT_SAT stays low so the return stroke
+   is near white — that white core is what makes the eye read "hot". A
+   fully saturated stroke reads as a coloured tube light instead.
+
+   TRIM compensates for the eye, not the LED. Green sits at the peak of
+   human luminous sensitivity, so a green flash at MASTER 170 feels
+   roughly twice as bright as blue at 170. Pull greens back. */
+struct Palette { const char *name; uint8_t hue, sat, hotSat, trim; };
+
+__attribute__((unused))
+const Palette PALETTES[] = {
+  //  name           hue  sat  hotSat  trim
+  { "storm",         160, 200,    40,   255 },  // cold blue-white, where this started
+  { "tornado",        80, 165,    30,   200 },  // sickly yellow-green; the dread is in the LOW saturation
+  { "voldemort",      96, 220,    45,   190 },  // vivid unnatural green — menace rather than dread
+  { "halloween",     192, 205,    55,   235 },  // purple
+  { "red planet",      8, 235,    60,   245 },  // mars dust
+};
+#define NUM_PALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
+`;
+const FILE_STORM_H  = `/* Storm engine, generated by Bolt Bench — overwritten on export. */
+#pragma once
+#include <FastLED.h>
+#include "config.h"
+#include "layout.h"
+#include "tuning.h"
+
+CRGB leds[NUM_LEDS];
+
+/* ── palette ────────────────────────────────────────────────── */
+/* Both endpoints of the heat ramp, resolved once per frame rather than
+   per pixel, so addLed() stays three mix8 and three scale8. */
+CRGB coolC, hotC;
+
+void updatePalette() {
+  hsv2rgb_rainbow(CHSV(HUE, SAT,     255), coolC);
+  hsv2rgb_rainbow(CHSV(HUE, HOT_SAT, 255), hotC);
+  LOG("[storm] palette hue=%u sat=%u hotSat=%u -> cool #%02X%02X%02X hot #%02X%02X%02X\\n",
+      (unsigned)HUE, (unsigned)SAT, (unsigned)HOT_SAT,
+      coolC.r, coolC.g, coolC.b, hotC.r, hotC.g, hotC.b);
+}
 
 /* ── helpers ────────────────────────────────────────────────── */
 static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t amt) {
@@ -1575,7 +1663,7 @@ void trigger(uint8_t segIdx, uint32_t at) {
   if (slot < 0) {
 #if STORM_LOG
     Segment sg; memcpy_P(&sg, &SEGMENTS[segIdx], sizeof(Segment));
-    LOG("[storm] DROPPED %s - all %u strike slots busy\n", sg.name, (unsigned)MAX_STRIKES);
+    LOG("[storm] DROPPED %s — all %u strike slots busy\\n", sg.name, (unsigned)MAX_STRIKES);
 #endif
     return;
   }
@@ -1583,7 +1671,7 @@ void trigger(uint8_t segIdx, uint32_t at) {
 #if STORM_LOG
   const Strike &s = strikes[slot];
   Segment sg; memcpy_P(&sg, &SEGMENTS[segIdx], sizeof(Segment));
-  LOG("[storm] strike  %-16s slot=%u leader=%ums strokes=%u forkMask=0x%02X total=%ums\n",
+  LOG("[storm] strike  %-16s slot=%u leader=%ums strokes=%u forkMask=0x%02X total=%ums\\n",
       sg.name, (unsigned)slot, (unsigned)s.leaderMs, (unsigned)s.nStrokes,
       (unsigned)s.forkMask, (unsigned)s.total);
 #endif
@@ -1597,11 +1685,9 @@ void addLed(uint16_t i, uint8_t bright, uint8_t heat, uint16_t pos, uint16_t len
     bright = qsub8(bright, scale8(bright, scale8(t, TAPER)));
     if (!bright) return;
   }
-  uint8_t cr = 255 - scale8(215, TINT);
-  uint8_t cg = 255 - scale8(145, TINT);
-  leds[i].r = qadd8(leds[i].r, scale8(mix8(cr, 255, heat), bright));
-  leds[i].g = qadd8(leds[i].g, scale8(mix8(cg, 255, heat), bright));
-  leds[i].b = qadd8(leds[i].b, bright);
+  leds[i].r = qadd8(leds[i].r, scale8(mix8(coolC.r, hotC.r, heat), bright));
+  leds[i].g = qadd8(leds[i].g, scale8(mix8(coolC.g, hotC.g, heat), bright));
+  leds[i].b = qadd8(leds[i].b, scale8(mix8(coolC.b, hotC.b, heat), bright));
 }
 
 /* ── channel envelope: intensity + heat (white ↔ blue) ──────── */
@@ -1675,7 +1761,7 @@ void renderStrike(Strike &s, uint32_t now) {
     s.active = false;
 #if STORM_LOG
     Segment sg; memcpy_P(&sg, &SEGMENTS[s.seg], sizeof(Segment));
-    LOG("[storm]   done  %-16s after %ums\n", sg.name, (unsigned)el);
+    LOG("[storm]   done  %-16s after %ums\\n", sg.name, (unsigned)el);
 #endif
     return;
   }
@@ -1749,24 +1835,34 @@ uint8_t randomBolt() {
 
 void logBoot() {
 #if STORM_LOG
-  LOG("\n[storm] StormCloud ready - %u px, %u segments, pin %u, master %u\n",
+  LOG("\\n[storm] StormCloud ready — %u px, %u segments, pin %u, master %u\\n",
       (unsigned)NUM_LEDS, (unsigned)NUM_SEGMENTS, (unsigned)LED_PIN, (unsigned)MASTER);
-  LOG("[storm] %-16s %5s %5s %6s  %s\n", "segment", "start", "len", "role", "attachment");
+  LOG("[storm] %-16s %5s %5s %6s  %s\\n", "segment", "start", "len", "role", "attachment");
   for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
     Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
     if (sg.parent < 0) {
-      LOG("[storm] %-16s %5u %5u %6s  %s\n", sg.name, (unsigned)sg.start, (unsigned)sg.len,
+      LOG("[storm] %-16s %5u %5u %6s  %s\\n", sg.name, (unsigned)sg.start, (unsigned)sg.len,
           sg.isBolt ? "bolt" : "cloud", sg.isBolt ? "root channel" : "-");
     } else {
       Segment pa; memcpy_P(&pa, &SEGMENTS[sg.parent], sizeof(Segment));
-      LOG("[storm] %-16s %5u %5u %6s  off %s at %u%%\n", sg.name, (unsigned)sg.start,
+      LOG("[storm] %-16s %5u %5u %6s  off %s at %u%%\\n", sg.name, (unsigned)sg.start,
           (unsigned)sg.len, "fork", pa.name, (unsigned)(sg.forkAt * 100 / 255));
     }
   }
-  LOG("[storm] frame buffer %u B, strike pool %u B, segment table %u B\n\n",
+  LOG("[storm] frame buffer %u B, strike pool %u B, segment table %u B\\n\\n",
       (unsigned)sizeof(leds), (unsigned)sizeof(strikes), (unsigned)sizeof(SEGMENTS));
 #endif
 }
+`;
+const FILE_MAIN_CPP = `/* ─────────────────────────────────────────────────────────────
+   StormCloud — generated by Bolt Bench
+
+   Four of the five files here are regenerated wholesale every time you
+   export from the bench: layout.h, tuning.h, storm.h and this one.
+   config.h is yours and is never overwritten — pins, logging and
+   palettes live there.
+   ───────────────────────────────────────────────────────────── */
+#include "storm.h"
 
 void setup() {
 #if STORM_LOG
@@ -1775,7 +1871,8 @@ void setup() {
   while (!Serial && millis() - waited < 1500) { }   // but never hang without a host
 #endif
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  FastLED.setBrightness(MASTER);
+  FastLED.setBrightness(scale8(MASTER, TRIM));
+  updatePalette();
   // 300 px at full white is ~18 A at 5 V and this animation really does flash
   // most of the cloud at once. Uncomment to let FastLED hold the peak down:
   // FastLED.setMaxPowerInVoltsAndMilliamps(5, 4000);
@@ -1808,7 +1905,7 @@ void loop() {
     uint32_t span = now - statAt ? now - statAt : 1;
     uint8_t act = 0;
     for (uint8_t i = 0; i < MAX_STRIKES; i++) if (strikes[i].active) act++;
-    LOG("[storm] %lu fps  active=%u  peak draw=%lu mA  next strike in %lu ms\n",
+    LOG("[storm] %lu fps  active=%u  peak draw=%lu mA  next strike in %lu ms\\n",
         (unsigned long)(frames * 1000UL / span), (unsigned)act,
         (unsigned long)(peakmW / 5),
         (unsigned long)(nextStrikeAt > now ? nextStrikeAt - now : 0));
@@ -1819,13 +1916,131 @@ void loop() {
   FastLED.show();
 }
 `;
+
+function fileLayoutH(){
+  const nameW = Math.max(12, ...runs.map(r => cName(r.name).length + 3));
+  const segLines = runs.map((r, i) =>
+    `  { ${('"' + cName(r.name) + '",').padEnd(nameW)} ${String(r.start).padStart(3)}, ${String(r.drawn || 0).padStart(3)}, ${r.role === 'bolt' ? 1 : 0}, ` +
+    `${String(r.nOX || 0).padStart(3)}, ${String(r.nOY || 0).padStart(3)}, ` +
+    `${String(r.parentIdx == null ? -1 : r.parentIdx).padStart(2)}, ${String(r.forkAt == null ? 128 : r.forkAt).padStart(3)} },` +
+    `${r.parentIdx >= 0 ? '  // forks off ' + cName(runs[r.parentIdx].name) : ''}`).join('\n');
+  const defs = runs.map((r, i) => `#define ${ident(r.name, i).padEnd(22)} ${i}`).join('\n');
+
+  return `/* Routing geometry, generated by Bolt Bench — overwritten on export.
+   ${runs.length} runs · ${usedLeds}/${NUM_LEDS} pixels · ${runs.filter(r => r.role === 'bolt' && r.parentIdx < 0).length} root channels, ${runs.filter(r => r.parentIdx >= 0).length} forks */
+#pragma once
+#include <Arduino.h>
+
+#define NUM_LEDS     ${NUM_LEDS}
+
+#define SEG_NAME_LEN ${SEG_NAME_LEN}       // fixed array, so memcpy_P hands back a usable string
+
+struct Segment {
+  char     name[SEG_NAME_LEN];   // ASCII; folded from the bench's run names
+  uint16_t start;
+  uint16_t len;
+  uint8_t  isBolt;
+  uint8_t  ox, oy;      // channel root, normalised 0..255
+  int8_t   parent;      // -1 = root channel; otherwise the channel it forks off
+  uint8_t  forkAt;      // 0..255 along the parent, where the branch leaves
+};
+
+${defs}
+#define NUM_SEGMENTS ${runs.length}
+
+const Segment SEGMENTS[NUM_SEGMENTS] PROGMEM = {
+${segLines}
+};
+
+// pixel positions, normalised 0..255 across the long axis
+const uint8_t LED_X[NUM_LEDS] PROGMEM = {
+${tableU8(nrmX, NUM_LEDS, 20)}
+};
+const uint8_t LED_Y[NUM_LEDS] PROGMEM = {
+${tableU8(nrmY, NUM_LEDS, 20)}
+};
+`;
+}
+
+function fileTuningH(){
+  const d = (k, v) => `#define ${k.padEnd(13)} ${v}`;
+  return `/* Animation parameters, generated by Bolt Bench — overwritten on export. */
+#pragma once
+
+${d('GAP_MIN', P.gapMin)}
+${d('GAP_MAX', P.gapMax)}
+${d('DBL_CHANCE', P.dblChance)}
+${d('CLUSTER_MS', P.clusterMs)}
+${d('LEAD_MIN', Math.min(P.leadMin, P.leadMax))}
+${d('LEAD_MAX', Math.max(P.leadMin, P.leadMax))}
+${d('TRAIL', P.trail)}
+${d('TAPER', P.taper)}
+${d('STRK_MIN', Math.min(P.strkMin, P.strkMax))}
+${d('STRK_MAX', Math.max(P.strkMin, P.strkMax))}
+${d('DUR_MIN', Math.min(P.durMin, P.durMax))}
+${d('DUR_MAX', Math.max(P.durMin, P.durMax))}
+${d('RGAP_MIN', Math.min(P.rgapMin, P.rgapMax))}
+${d('RGAP_MAX', Math.max(P.rgapMin, P.rgapMax))}
+${d('PARTIAL', P.partial)}
+${d('FORK_DIM', P.forkDim)}
+${d('FORK_FOLLOW', P.forkFollow)}
+${d('GLOW_MS', P.glowMs)}
+${d('AMB_LEVEL', P.ambLevel)}
+${d('AMB_SPEED', P.ambSpeed)}
+${d('CLOUD_FLASH', P.cloudFlash)}
+${d('CLOUD_SPREAD', P.cloudSpread)}
+${d('CLOUD_MS', P.cloudMs)}
+${d('RUMBLE', P.rumble)}
+${d('MASTER', P.master)}
+
+/* Colour. The hue lives in the AFTERGLOW, not the strike: HOT_SAT keeps the
+   return stroke near white so it still reads as hot, and the pixel cools
+   toward the fully saturated HUE as it fades. Push HOT_SAT up and it stops
+   looking like lightning and starts looking like a coloured tube.
+   TRIM scales MASTER per palette — green sits where the eye is most
+   sensitive, so it needs pulling back relative to blue.
+   See PALETTES[] in config.h for starting points. */
+${d('HUE', P.hue)}      // FastLED hue: 0 red, 64 yellow, 96 green, 160 blue, 192 purple
+${d('SAT', P.sat)}
+${d('HOT_SAT', P.hotSat)}
+${d('TRIM', P.trim)}
+`;
+}
+
+function buildFiles(){
+  return {
+    'config.h':    FILE_CONFIG_H,
+    'layout.h':    fileLayoutH(),
+    'tuning.h':    fileTuningH(),
+    'storm.h':     FILE_STORM_H,
+    'main.cpp':    FILE_MAIN_CPP,
+    'layout.json': layoutJSON(),
+  };
+}
+
+let exportTab = 'layout.h';
+const codeOut = document.getElementById('codeOut');
+const tabsEl = document.getElementById('tabs');
+
+function buildTabs(){
+  tabsEl.textContent = '';
+  for (const name of Object.keys(buildFiles())){
+    const b = el('button', 'btn' + (name === exportTab ? ' on' : ''), name);
+    if (name === 'config.h') b.title = 'Starter only — the bench never overwrites your config.h';
+    b.addEventListener('click', () => { exportTab = name; buildTabs(); buildExport(); });
+    tabsEl.append(b);
+  }
+}
+function buildExport(){
+  const f = buildFiles();
+  codeOut.textContent = f[exportTab] != null ? f[exportTab] : f['layout.h'];
 }
 
 document.getElementById('copyCode').addEventListener('click', async () => {
   const said = document.getElementById('copySaid');
   try {
     await navigator.clipboard.writeText(codeOut.textContent);
-    said.textContent = exportTab === 'ino' ? 'Sketch copied' : 'Layout copied';
+    said.textContent = exportTab + ' copied';
   } catch(e){
     const sel = window.getSelection(); const rg = document.createRange();
     rg.selectNodeContents(codeOut); sel.removeAllRanges(); sel.addRange(rg);
@@ -1891,6 +2106,8 @@ function load(){
 load();
 buildParams();
 syncParamUI();
+paintSwatches();
+buildTabs();
 sizeStage(); sizeStrip(); sizeScope();
 rebuildLayout();
 renderRuns();
