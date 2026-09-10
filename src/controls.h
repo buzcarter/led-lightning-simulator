@@ -137,19 +137,9 @@ void controlsUpdate(bool force) {
   uint8_t b = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
   if (force || trimChanged || b != g_bright) { g_bright = b; FastLED.setBrightness(b); }
 
-#if STORM_LOG
-  static uint8_t lp = 255, ll = 255, ls = 255;
-  if (force || g_palette != lp || g_level != ll || sp != ls) {
-    if (millis() - loggedAt >= POT_LOG_MS || force) {
-      lp = g_palette; ll = g_level; ls = sp; loggedAt = millis();
-      LOG("[pots]  %-11s hue=%-3u sat=%-3u | speed %u.%02ux | level %2u/%u (%u%%) bright=%u\n",
-          PALETTES[g_palette].name, (unsigned)g_hue, (unsigned)g_sat,
-          (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
-          (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1),
-          (unsigned)LEVEL_PERCENT(g_level), (unsigned)g_bright);
-    }
-  }
-#endif
+  g_potRaw[0] = potPalette.out;
+  g_potRaw[1] = potSpeed.out;
+  g_potRaw[2] = potLevel.out;
 }
 
 void controlsBegin() {

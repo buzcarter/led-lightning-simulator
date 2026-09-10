@@ -35,7 +35,13 @@
   #define STORM_LOG_BAUD 115200
 #endif
 #ifndef STORM_LOG_STATS
-  #define STORM_LOG_STATS 5000    // ms between heartbeat lines; 0 = off
+  #define STORM_LOG_STATS 5000    // ms between dashboard refreshes when nothing changes
+#endif
+#ifndef STORM_LOG_MIN_MS
+  #define STORM_LOG_MIN_MS 120    // floor between lines, so a burst cannot flood the port
+#endif
+#ifndef STORM_LOG_RAW
+  #define STORM_LOG_RAW 0         // 1 appends the raw 0..255 pot readings
 #endif
 
 #if STORM_LOG

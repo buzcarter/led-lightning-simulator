@@ -32,6 +32,7 @@ uint8_t  g_bright = 0;                 // resolved in setup()
 uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
 uint8_t  g_trim   = TRIM;              // brightness trim of the live palette
 uint8_t  g_palette = 0;                // index into PALETTES[] in config.h
+uint8_t  g_potRaw[3] = {0, 0, 0};      // palette/speed/level, 0..255, for STORM_LOG_RAW
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
 void updatePalette() {
@@ -136,13 +137,6 @@ void trigger(uint8_t segIdx, uint32_t at) {
     return;
   }
   makeStrike(slot, segIdx, at);
-#if STORM_LOG
-  const Strike &s = strikes[slot];
-  Segment sg; memcpy_P(&sg, &SEGMENTS[segIdx], sizeof(Segment));
-  LOG("[storm] strike  %-16s slot=%u leader=%ums strokes=%u forkMask=0x%02X total=%ums\n",
-      sg.name, (unsigned)slot, (unsigned)s.leaderMs, (unsigned)s.nStrokes,
-      (unsigned)s.forkMask, (unsigned)s.total);
-#endif
 }
 
 /* ── per-pixel accumulate ───────────────────────────────────── */
@@ -225,14 +219,7 @@ void renderStrike(Strike &s, uint32_t now) {
   if (!s.active) return;
   if (now < s.t0) return;
   uint32_t el = now - s.t0;
-  if (el > s.total) {
-    s.active = false;
-#if STORM_LOG
-    Segment sg; memcpy_P(&sg, &SEGMENTS[s.seg], sizeof(Segment));
-    LOG("[storm]   done  %-16s after %ums\n", sg.name, (unsigned)el);
-#endif
-    return;
-  }
+  if (el > s.total) { s.active = false; return; }
   uint16_t e = (uint16_t)el;
 
   Segment seg; memcpy_P(&seg, &SEGMENTS[s.seg], sizeof(Segment));
@@ -288,6 +275,70 @@ void renderAmbient(uint32_t now) {
       if (v) addLed(j, v, 40, 0, 1);
     }
   }
+}
+
+/* ── dashboard ──────────────────────────────────────────────── */
+/* One line, rewritten when the state a person would notice changes, and
+   refreshed on a slow timer while it does not. Not a log: no scrollback of
+   every strike and every knob nudge, just the current picture. Only DROPPED
+   still prints on its own, because it is a fault rather than a state. */
+void logDashboard(uint32_t realNow) {
+#if STORM_LOG
+  static char     lastLine[128] = "";
+  static uint32_t lastAt = 0, frames = 0, peakmW = 0, fpsAt = 0, fps = 0;
+
+  frames++;
+  uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
+  if (mw > peakmW) peakmW = mw;
+  if (realNow - fpsAt >= 1000) {
+    fps = frames * 1000UL / (realNow - fpsAt ? realNow - fpsAt : 1);
+    frames = 0; fpsAt = realNow;
+  }
+
+  // A strike lights its whole tree, so the root channel is the summary; forks
+  // never fire on their own. Overlapping strikes show as "name +N".
+  char chan[28];
+  uint8_t nActive = 0; int8_t newest = -1; uint32_t newestT = 0;
+  for (uint8_t i = 0; i < MAX_STRIKES; i++) {
+    if (!strikes[i].active) continue;
+    nActive++;
+    if (newest < 0 || strikes[i].t0 >= newestT) { newest = i; newestT = strikes[i].t0; }
+  }
+  if (newest < 0) snprintf(chan, sizeof chan, "_");
+  else {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[strikes[newest].seg], sizeof(Segment));
+    if (nActive > 1) snprintf(chan, sizeof chan, "%s +%u", sg.name, (unsigned)(nActive - 1));
+    else             snprintf(chan, sizeof chan, "%s", sg.name);
+  }
+
+  char mood[22];
+  snprintf(mood, sizeof mood, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
+
+  char line[128];
+  snprintf(line, sizeof line,
+           "mood: %-15s rate: %u.%02u  severity: %2u/%-2u storm: %-20s",
+           mood, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
+           (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1), chan);
+
+  bool changed = strcmp(line, lastLine) != 0;
+  bool due     = (realNow - lastAt) >= STORM_LOG_STATS;
+  if (!((changed && realNow - lastAt >= STORM_LOG_MIN_MS) || due)) return;
+
+  strncpy(lastLine, line, sizeof lastLine - 1);
+  lastLine[sizeof lastLine - 1] = 0;
+  lastAt = realNow;
+
+#if STORM_LOG_RAW
+  LOG("%s fps: %3lu  mA: %4lu  raw: %3u/%3u/%3u\n", line,
+      (unsigned long)fps, (unsigned long)(peakmW / 5),
+      (unsigned)g_potRaw[0], (unsigned)g_potRaw[1], (unsigned)g_potRaw[2]);
+#else
+  LOG("%s fps: %3lu  mA: %4lu\n", line, (unsigned long)fps, (unsigned long)(peakmW / 5));
+#endif
+  peakmW = 0;                    // peak is per line, not since boot
+#else
+  (void)realNow;
+#endif
 }
 
 /* ── main loop ──────────────────────────────────────────────── */

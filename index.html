@@ -1632,19 +1632,9 @@ void controlsUpdate(bool force) {
   uint8_t b = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
   if (force || trimChanged || b != g_bright) { g_bright = b; FastLED.setBrightness(b); }
 
-#if STORM_LOG
-  static uint8_t lp = 255, ll = 255, ls = 255;
-  if (force || g_palette != lp || g_level != ll || sp != ls) {
-    if (millis() - loggedAt >= POT_LOG_MS || force) {
-      lp = g_palette; ll = g_level; ls = sp; loggedAt = millis();
-      LOG("[pots]  %-11s hue=%-3u sat=%-3u | speed %u.%02ux | level %2u/%u (%u%%) bright=%u\\n",
-          PALETTES[g_palette].name, (unsigned)g_hue, (unsigned)g_sat,
-          (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
-          (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1),
-          (unsigned)LEVEL_PERCENT(g_level), (unsigned)g_bright);
-    }
-  }
-#endif
+  g_potRaw[0] = potPalette.out;
+  g_potRaw[1] = potSpeed.out;
+  g_potRaw[2] = potLevel.out;
 }
 
 void controlsBegin() {
@@ -1702,7 +1692,13 @@ const FILE_CONFIG_H = `/* ──────────────────
   #define STORM_LOG_BAUD 115200
 #endif
 #ifndef STORM_LOG_STATS
-  #define STORM_LOG_STATS 5000    // ms between heartbeat lines; 0 = off
+  #define STORM_LOG_STATS 5000    // ms between dashboard refreshes when nothing changes
+#endif
+#ifndef STORM_LOG_MIN_MS
+  #define STORM_LOG_MIN_MS 120    // floor between lines, so a burst cannot flood the port
+#endif
+#ifndef STORM_LOG_RAW
+  #define STORM_LOG_RAW 0         // 1 appends the raw 0..255 pot readings
 #endif
 
 #if STORM_LOG
@@ -1770,6 +1766,7 @@ uint8_t  g_bright = 0;                 // resolved in setup()
 uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
 uint8_t  g_trim   = TRIM;              // brightness trim of the live palette
 uint8_t  g_palette = 0;                // index into PALETTES[] in config.h
+uint8_t  g_potRaw[3] = {0, 0, 0};      // palette/speed/level, 0..255, for STORM_LOG_RAW
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
 void updatePalette() {
@@ -1874,13 +1871,6 @@ void trigger(uint8_t segIdx, uint32_t at) {
     return;
   }
   makeStrike(slot, segIdx, at);
-#if STORM_LOG
-  const Strike &s = strikes[slot];
-  Segment sg; memcpy_P(&sg, &SEGMENTS[segIdx], sizeof(Segment));
-  LOG("[storm] strike  %-16s slot=%u leader=%ums strokes=%u forkMask=0x%02X total=%ums\\n",
-      sg.name, (unsigned)slot, (unsigned)s.leaderMs, (unsigned)s.nStrokes,
-      (unsigned)s.forkMask, (unsigned)s.total);
-#endif
 }
 
 /* ── per-pixel accumulate ───────────────────────────────────── */
@@ -1963,14 +1953,7 @@ void renderStrike(Strike &s, uint32_t now) {
   if (!s.active) return;
   if (now < s.t0) return;
   uint32_t el = now - s.t0;
-  if (el > s.total) {
-    s.active = false;
-#if STORM_LOG
-    Segment sg; memcpy_P(&sg, &SEGMENTS[s.seg], sizeof(Segment));
-    LOG("[storm]   done  %-16s after %ums\\n", sg.name, (unsigned)el);
-#endif
-    return;
-  }
+  if (el > s.total) { s.active = false; return; }
   uint16_t e = (uint16_t)el;
 
   Segment seg; memcpy_P(&seg, &SEGMENTS[s.seg], sizeof(Segment));
@@ -2026,6 +2009,70 @@ void renderAmbient(uint32_t now) {
       if (v) addLed(j, v, 40, 0, 1);
     }
   }
+}
+
+/* ── dashboard ──────────────────────────────────────────────── */
+/* One line, rewritten when the state a person would notice changes, and
+   refreshed on a slow timer while it does not. Not a log: no scrollback of
+   every strike and every knob nudge, just the current picture. Only DROPPED
+   still prints on its own, because it is a fault rather than a state. */
+void logDashboard(uint32_t realNow) {
+#if STORM_LOG
+  static char     lastLine[128] = "";
+  static uint32_t lastAt = 0, frames = 0, peakmW = 0, fpsAt = 0, fps = 0;
+
+  frames++;
+  uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
+  if (mw > peakmW) peakmW = mw;
+  if (realNow - fpsAt >= 1000) {
+    fps = frames * 1000UL / (realNow - fpsAt ? realNow - fpsAt : 1);
+    frames = 0; fpsAt = realNow;
+  }
+
+  // A strike lights its whole tree, so the root channel is the summary; forks
+  // never fire on their own. Overlapping strikes show as "name +N".
+  char chan[28];
+  uint8_t nActive = 0; int8_t newest = -1; uint32_t newestT = 0;
+  for (uint8_t i = 0; i < MAX_STRIKES; i++) {
+    if (!strikes[i].active) continue;
+    nActive++;
+    if (newest < 0 || strikes[i].t0 >= newestT) { newest = i; newestT = strikes[i].t0; }
+  }
+  if (newest < 0) snprintf(chan, sizeof chan, "_");
+  else {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[strikes[newest].seg], sizeof(Segment));
+    if (nActive > 1) snprintf(chan, sizeof chan, "%s +%u", sg.name, (unsigned)(nActive - 1));
+    else             snprintf(chan, sizeof chan, "%s", sg.name);
+  }
+
+  char mood[22];
+  snprintf(mood, sizeof mood, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
+
+  char line[128];
+  snprintf(line, sizeof line,
+           "mood: %-15s rate: %u.%02u  severity: %2u/%-2u storm: %-20s",
+           mood, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
+           (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1), chan);
+
+  bool changed = strcmp(line, lastLine) != 0;
+  bool due     = (realNow - lastAt) >= STORM_LOG_STATS;
+  if (!((changed && realNow - lastAt >= STORM_LOG_MIN_MS) || due)) return;
+
+  strncpy(lastLine, line, sizeof lastLine - 1);
+  lastLine[sizeof lastLine - 1] = 0;
+  lastAt = realNow;
+
+#if STORM_LOG_RAW
+  LOG("%s fps: %3lu  mA: %4lu  raw: %3u/%3u/%3u\\n", line,
+      (unsigned long)fps, (unsigned long)(peakmW / 5),
+      (unsigned)g_potRaw[0], (unsigned)g_potRaw[1], (unsigned)g_potRaw[2]);
+#else
+  LOG("%s fps: %3lu  mA: %4lu\\n", line, (unsigned long)fps, (unsigned long)(peakmW / 5));
+#endif
+  peakmW = 0;                    // peak is per line, not since boot
+#else
+  (void)realNow;
+#endif
 }
 
 /* ── main loop ──────────────────────────────────────────────── */
@@ -2109,26 +2156,7 @@ void loop() {
 
   for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
 
-#if STORM_LOG && STORM_LOG_STATS
-  // wall-clock, not the virtual clock — otherwise the speed knob would scale
-  // the reported frame rate along with the storm
-  static uint32_t statAt = 0, frames = 0, peakmW = 0;
-  uint32_t realNow = millis();
-  frames++;
-  uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
-  if (mw > peakmW) peakmW = mw;
-  if (realNow - statAt >= STORM_LOG_STATS) {
-    uint32_t span = realNow - statAt ? realNow - statAt : 1;
-    uint8_t act = 0;
-    for (uint8_t i = 0; i < MAX_STRIKES; i++) if (strikes[i].active) act++;
-    LOG("[storm] %lu fps  active=%u  peak draw=%lu mA  speed %u.%02ux  next strike in %lu ms\\n",
-        (unsigned long)(frames * 1000UL / span), (unsigned)act,
-        (unsigned long)(peakmW / 5),
-        (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
-        (unsigned long)(nextStrikeAt > now ? nextStrikeAt - now : 0));
-    statAt = realNow; frames = 0; peakmW = 0;
-  }
-#endif
+  logDashboard(millis());     // wall-clock, not the speed-scaled storm clock
 
   FastLED.show();
 }

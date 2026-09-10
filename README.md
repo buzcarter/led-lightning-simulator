@@ -188,28 +188,20 @@ The sketch logs to serial at 115200 (matching `monitor_speed` in `platformio.ini
 
 Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the define is `#ifndef`-guarded — drops Serial, the format strings, and the per-frame power measurement entirely. On an ESP32 that is **28 KB of flash and 368 bytes of RAM**, so the off switch is real rather than cosmetic.
 
-Five events are reported:
-
-| Event | When | Why you want it |
-|---|---|---|
-| Boot table | Once at startup | Dumps every segment with its name, indices, role and attachment — confirms the firmware's idea of your routing matches the bench's |
-| `strike` | A channel fires | Names the channel and prints the rolled leader, stroke count, `forkMask` and total duration |
-| `done` | A strike finishes | Pairs with the above so you can see overlap |
-| `DROPPED` | No free strike slot | The `MAX_STRIKES` diagnostic. If you see these, the storm is scheduling faster than it can render |
-| Heartbeat | Every 5 s | Frame rate, active strike count, measured peak draw in mA, and time to the next strike |
-
-Roughly what it looks like:
+Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every knob nudge.
 
 ```
-[storm] StormCloud ready - 300 px, 7 segments, pin 2, master 170
-[storm] segment          start   len   role  attachment
-[storm] Cloud body           0   132  cloud  -
-[storm] Bolt - left        132    38   bolt  root channel
-[storm] Fork - left        170    18   fork  off Bolt - left at 54%
-[storm] strike  Bolt - centre   slot=0 leader=180ms strokes=1 forkMask=0x01 total=1481ms
-[storm]   done  Bolt - centre   after 1482ms
-[storm] 98 fps  active=0  peak draw=3180 mA  next strike in 2204 ms
+mood: tornado/80      rate: 1.00  severity:  3/10 storm: Bolt_Left            fps:  98  mA: 3180
+mood: tornado/80      rate: 1.00  severity:  3/10 storm: Bolt_Centre          fps:  97  mA: 4020
+mood: tornado/80      rate: 1.00  severity:  3/10 storm: _                    fps:  99  mA:  240
+mood: voldemort/96    rate: 1.32  severity:  7/10 storm: Bolt_Centre +1       fps:  96  mA: 5110
 ```
+
+`storm` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`. `STORM_LOG_RAW 1` appends the raw 0–255 knob readings.
+
+Fields are fixed-width on purpose. A dashboard whose columns jump around is unreadable at a glance, which is the only thing it is for.
+
+Two lines still print outside this. `DROPPED` is a fault rather than a state — it means the storm is scheduling faster than `MAX_STRIKES` can render — and the boot banner dumps the segment table once so you can check the firmware's idea of the routing against the bench's.
 
 That peak draw figure comes from FastLED's own `calculate_unscaled_power_mW`, so it is the number to watch against whatever supply you end up using — see below.
 
