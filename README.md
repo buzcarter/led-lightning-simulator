@@ -239,21 +239,27 @@ Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top 
 
 ## Knobs
 
-Three B10K linear pots on ADC1 — hue on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. Wiring is on the [pot wiring card](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb).
+Three B10K linear pots on ADC1 — palette on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. Wiring is on the [pot wiring card](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb).
 
-Three decisions worth knowing about, because the obvious version of each is wrong:
+**All three knobs are detented.** A continuous knob on a noisy 12-bit ADC is the worst of both worlds: never quite still, never repeatable. A detent holds until the knob moves three quarters of a step, which puts the hysteresis band far above the noise floor:
 
-**The speed knob drives a virtual clock, not scaled `millis()`.** Scaling `millis()` directly would teleport every strike in flight the moment the knob moved. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`. The mapping is geometric, 0.25× to 4×, because a linear speed knob spends most of its travel somewhere useless; it snaps to exactly 1.00× near centre so you can find it by feel.
+| Knob | Detents | Tolerance | Margin over real noise |
+|---|---|---|---|
+| Palette | 5 | 16 counts | 94× |
+| Speed | 11 | 6 counts | 35× |
+| Level | 11 | 6 counts | 35× |
 
-**Smoothing is tuned for *this* loop rate.** 300 WS2812Bs take ~9 ms to clock out, so `loop()` runs near 105 Hz — thousands of times slower than a sketch that just polls. An EMA alpha borrowed from a fast-looping project makes the knobs feel like treacle here. Each pot is visited every third pass (~35 Hz) with a shift of 2, settling in ~110 ms.
+Real noise is about ±0.17 counts on the 0–255 scale: roughly ±15 LSB of raw ADC jitter with a 10k source and the 100 nF cap, cut by √32 from oversampling. A *continuous* knob has a tolerance of zero by definition — it dithers at any noise level at all, which is exactly what makes one feel broken.
 
-**One pot per pass, oversampled four times.** Reading all three every frame costs about 1 ms of a 9.5 ms budget — a tenth of the frame. Round-robin keeps it under 4% while still updating each knob far faster than a hand can turn it. Four samples per visit halves the white noise before the EMA sees it, which is cheaper than a long time constant.
+**The palette knob carries a whole look per detent, not a hue.** Rotating hue alone leaves `SAT` wherever the export left it, and at low saturation every hue is the same near-white — so the knob appears dead no matter how clean the reading is. Each detent sets hue, saturation, peak saturation and trim together from `PALETTES[]` in `config.h`. Add rows there and the knob grows more positions on its own. Fine hue control belongs in the bench; the knob is for choosing.
 
-A one-count hysteresis sits on the output. Without it the bottom bit dithers and the hue crawls while nobody is touching anything.
+**Speed is geometric**, 0.25× to 4× across 11 detents, with detent 5 at exactly 1.00×. Equal twists give equal ratio changes; a linear speed knob spends most of its travel somewhere useless.
 
-**Level runs in detents, hue and speed do not.** `LEVEL_STEPS` is 21 — 5% increments across 0–100%, which is 21 stops rather than 20, since 0–19 would top out at 95% and never reach full. Both brightness now and storm severity later read the same `g_level`, so they share one set of detents.
+It drives a **virtual clock, not scaled `millis()`**. Scaling `millis()` directly would teleport every strike in flight the instant the knob moved. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`.
 
-Quantising needs its own, wider hysteresis: park a knob exactly on a boundary and a few counts of ADC noise will flip it between two detents forever. The detent only changes once the knob has moved three quarters of a step. Simulated across a full sweep in both directions, all 21 detents are reachable one step at a time, with zero flips while parked on a boundary under ±3 counts of noise.
+**Sampling is rare and thorough** rather than constant and filtered. One knob is read every 250 ms round-robin, so each is refreshed about every 750 ms, averaging 32 conversions per read. Averaging N conversions cuts noise by √N; a smoothing filter buys the same quiet only by adding lag, so there is no EMA at all now. 32 conversions cost about 3 ms, landing in one frame out of twenty-six.
+
+`analogReadMilliVolts` is used over `analogRead` for the factory calibration curve, with a dead zone trimmed off each rail so the first and last detent stay reachable.
 
 ## Building the firmware
 
