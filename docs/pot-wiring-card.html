@@ -111,7 +111,7 @@ footer p{margin:0 0 7px}
 <header>
   <div class="eyebrow">Bolt Bench · storm controller</div>
   <h1>Pot Wiring Card</h1>
-  <p class="sub">Three B10K linear pots into an ESP32 DevKit, for palette, speed and level.</p>
+  <p class="sub">Three B10K linear pots and a chaos button into an ESP32 DevKit.</p>
 </header>
 
 <div class="danger">
@@ -173,13 +173,19 @@ footer p{margin:0 0 7px}
 <p class="note"><strong>The palette knob carries a whole look per detent, not a hue.</strong> Rotating hue alone leaves saturation wherever the export left it, and at low saturation every hue is the same near-white — so the knob appears dead. Fine hue control lives in the bench; the knob is for choosing.</p>
 <p class="note">All three are ADC1. <strong>ADC2 stops working entirely once WiFi is enabled</strong> — that rules out GPIO 0, 2, 4, 12–15 and 25–27. GPIO34 is input-only, which is a feature here: it cannot be driven as an output by mistake.</p>
 
-<h2>Five wires, not nine</h2>
+<h2>Chaos button</h2>
+<p class="note">A momentary pushbutton between <code>GPIO27</code> and ground. The internal pull-up does the rest, so it is two wires and no resistor — and it shares the ground rail already running to the pots, making it one extra conductor in the loom.</p>
+<p class="note"><strong>Do not put it on GPIO34–39.</strong> Those pins have no internal pull-ups and would need an external one. Any ordinary output-capable pin works: 13, 14, 25, 26, 27, 33.</p>
+<p class="note">A tap fires every root channel at once, staggered 90 ms apart so it reads as a cascade rather than one white frame, then holds the storm at maximum for 2.5 s and eases back to your knob positions over another 2 s. Tapping again restarts it. The dashboard shows <code>severity: CHAOS</code> while it runs.</p>
+
+<h2>Six wires, not eleven</h2>
 <ul class="loom">
   <li><span class="dot" style="background:var(--v33)"></span> 3.3 V — daisy-chain to all three <code>pin 3</code> <span class="to">1 wire</span></li>
   <li><span class="dot" style="background:var(--gnd)"></span> Ground — daisy-chain to all three <code>pin 1</code> <span class="to">1 wire</span></li>
   <li><span class="dot" style="background:var(--sig)"></span> Hue wiper <span class="to">GPIO32</span></li>
   <li><span class="dot" style="background:var(--sig2)"></span> Speed wiper <span class="to">GPIO33</span></li>
   <li><span class="dot" style="background:var(--sig3)"></span> Level wiper <span class="to">GPIO34</span></li>
+  <li><span class="dot" style="background:var(--ink-2)"></span> Chaos button — other leg to the ground rail <span class="to">GPIO27</span></li>
 </ul>
 <p class="note">Chain the two rails pot-to-pot inside the box so only five conductors leave it. Zip-tie a strain relief where the loom exits — panel pots have an anti-rotation tab, so either drill a 2 mm hole for it or snip it off, otherwise the pot spins in the panel and shears the wires.</p>
 

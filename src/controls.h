@@ -61,6 +61,94 @@ static const uint16_t SPEED_Q8[SPEED_STEPS] = {
 
 #define POT_LOG_MS       400
 
+/* ── chaos button ───────────────────────────────────────────── */
+/* A momentary button to GND on CHAOS_PIN, using the internal pull-up, so it
+   is two wires and no resistor. Do NOT put it on GPIO34-39: those pins have
+   no internal pull-ups and would need an external one.
+
+   A tap has a shape rather than being a flat flash. Every root channel fires
+   at once, staggered so it reads as a cascade instead of one white frame;
+   the scheduler's gaps collapse and every strike doubles for CHAOS_HOLD_MS;
+   then it all eases back to the knobs over CHAOS_DECAY_MS, like the storm
+   moving off. Tapping again restarts it.
+
+   The envelope runs in real milliseconds while the strikes it schedules run
+   on the storm clock — so a tap always lasts about four and a half seconds
+   no matter where the speed knob is. */
+#ifndef CHAOS_ENABLE
+  #define CHAOS_ENABLE 1
+#endif
+#define CHAOS_PIN          GPIO_NUM_27
+#define CHAOS_DEBOUNCE_MS  25
+#define CHAOS_HOLD_MS      2500     // everything at maximum
+#define CHAOS_DECAY_MS     2000     // easing back to the knob positions
+#define CHAOS_STAGGER_MS   90       // between channels in the opening volley
+#define CHAOS_GAP_MIN      90       // scheduler gaps while held
+#define CHAOS_GAP_MAX      260
+
+#if CHAOS_ENABLE
+
+static uint32_t chaosAt = 0;        // millis of the last tap; 0 = idle
+
+static inline uint16_t chaosLerp16(uint16_t base, uint16_t target, uint8_t amt) {
+  return (uint16_t)((int32_t)base + ((int32_t)target - (int32_t)base) * amt / 255);
+}
+
+void chaosFire(uint32_t realNow, uint32_t stormNow) {
+  chaosAt = realNow ? realNow : 1;
+  uint8_t k = 0;
+  for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
+    if (!sg.isBolt || sg.parent >= 0) continue;      // forks come with their parent
+    trigger(i, stormNow + (uint32_t)k * CHAOS_STAGGER_MS);
+    k++;
+  }
+  LOG("[storm] CHAOS -- %u channels\n", (unsigned)k);
+}
+
+void chaosBegin() {
+  pinMode(CHAOS_PIN, INPUT_PULLUP);
+  LOG("[storm] chaos button GPIO%u to GND\n", (unsigned)CHAOS_PIN);
+}
+
+void chaosPoll(uint32_t realNow, uint32_t stormNow) {
+  static uint8_t  lastRaw = HIGH, stable = HIGH;
+  static uint32_t changedAt = 0;
+
+  uint8_t raw = digitalRead(CHAOS_PIN);
+  if (raw != lastRaw) { lastRaw = raw; changedAt = realNow; }
+  if (realNow - changedAt >= CHAOS_DEBOUNCE_MS && stable != lastRaw) {
+    stable = lastRaw;
+    if (stable == LOW) chaosFire(realNow, stormNow);   // active low
+  }
+
+  if (!chaosAt) return;
+  uint32_t e = realNow - chaosAt;
+  if (e >= (uint32_t)CHAOS_HOLD_MS + CHAOS_DECAY_MS) {
+    chaosAt = 0; g_chaos = 0;
+    g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
+    FastLED.setBrightness(g_bright);
+    return;
+  }
+  uint8_t amt = 255;
+  if (e > CHAOS_HOLD_MS)
+    amt = (uint8_t)(255 - (uint32_t)(e - CHAOS_HOLD_MS) * 255 / CHAOS_DECAY_MS);
+  g_chaos = amt;
+
+  g_gapMin    = chaosLerp16(GAP_MIN, CHAOS_GAP_MIN, amt);
+  g_gapMax    = chaosLerp16(GAP_MAX, CHAOS_GAP_MAX, amt);
+  g_dblChance = (uint8_t)chaosLerp16(DBL_CHANCE, 255, amt);
+
+  uint8_t ceil8 = scale8(MASTER, g_trim);            // ignore the level knob while it rages
+  uint8_t head  = ceil8 > g_bright ? ceil8 - g_bright : 0;
+  FastLED.setBrightness((uint8_t)(g_bright + scale8(head, amt)));
+}
+
+#else
+inline void chaosBegin() {}
+inline void chaosPoll(uint32_t, uint32_t) {}
+#endif
+
 #if POTS_ENABLE
 
 struct Pot { gpio_num_t pin; uint8_t out; };

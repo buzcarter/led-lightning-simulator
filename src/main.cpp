@@ -26,11 +26,13 @@ void setup() {
   for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
   logBoot();
   controlsBegin();
+  chaosBegin();
 }
 
 void loop() {
   controlsUpdate(false);
   uint32_t now = stormClock();     // virtual: the speed knob stretches this
+  chaosPoll(millis(), now);        // button in real time, strikes in storm time
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   renderAmbient(now);
@@ -38,8 +40,8 @@ void loop() {
   if (now >= nextStrikeAt) {
     uint8_t seg = randomBolt();
     trigger(seg, now);
-    if (random8() < DBL_CHANCE) trigger(randomBolt(), now + rndR(40, CLUSTER_MS + 1));
-    nextStrikeAt = now + rndR(GAP_MIN, GAP_MAX + 1);
+    if (random8() < g_dblChance) trigger(randomBolt(), now + rndR(40, CLUSTER_MS + 1));
+    nextStrikeAt = now + rndR(g_gapMin, g_gapMax + 1);
   }
 
   for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);

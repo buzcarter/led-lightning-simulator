@@ -253,6 +253,28 @@ It drives a **virtual clock, not scaled `millis()`**. Scaling `millis()` directl
 
 `analogReadMilliVolts` is used over `analogRead` for the factory calibration curve, with a dead zone trimmed off each rail so the first and last detent stay reachable.
 
+## Chaos button
+
+A momentary button between `GPIO27` and ground, using the internal pull-up — two wires, no resistor, and it shares the ground rail already going to the pots. `CHAOS_ENABLE 0` compiles it out. Not on GPIO34–39: those have no internal pull-ups.
+
+A tap has a **shape**, rather than being a flat flash:
+
+| Phase | Duration | What happens |
+|---|---|---|
+| Volley | instant | Every root channel fires, staggered 90 ms so it reads as a cascade, not one white frame |
+| Hold | 2.5 s | Scheduler gaps collapse from 1400–5200 ms to 90–260 ms, every strike doubles, brightness ignores the level knob and goes to the ceiling |
+| Decay | 2.0 s | All three ease back to wherever the knobs are, like the storm moving off |
+
+The envelope runs in **real** milliseconds while the strikes it schedules run on the **storm** clock — so a tap always lasts about four and a half seconds regardless of where the speed knob sits. Tapping again restarts it. The dashboard reads `severity: CHAOS` throughout.
+
+The scheduler's gap and double-strike settings became runtime values to make this work, which is a down payment on the severity crossfade — that will drive the same three.
+
+## Severity and the presets
+
+Worth recording, because the obvious mapping is wrong: **the four bench presets are not one axis.** Distant storm → Rolling → Direct hit is a genuine severity ladder, with Rolling in the middle. Heat lightning is not on it — that is cloud-only sheet lightning with no channel strikes, a different *kind* of storm rather than a milder one. It belongs with the mood knob.
+
+So severity crossfades Distant ↔ Direct hit, and Heat lightning stays a separatechoice of its own.
+
 ## Building the firmware
 
 ```bash

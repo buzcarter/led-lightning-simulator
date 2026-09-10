@@ -33,6 +33,13 @@ uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's det
 uint8_t  g_trim   = TRIM;              // brightness trim of the live palette
 uint8_t  g_palette = 0;                // index into PALETTES[] in config.h
 uint8_t  g_potRaw[3] = {0, 0, 0};      // palette/speed/level, 0..255, for STORM_LOG_RAW
+
+/* Scheduler settings the chaos button borrows for a few seconds. Seeded from
+   tuning.h; the severity crossfade will drive these too when it lands. */
+uint16_t g_gapMin    = GAP_MIN;
+uint16_t g_gapMax    = GAP_MAX;
+uint8_t  g_dblChance = DBL_CHANCE;
+uint8_t  g_chaos     = 0;              // 0..255, position in the chaos envelope
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
 void updatePalette() {
@@ -314,11 +321,15 @@ void logDashboard(uint32_t realNow) {
   char mood[22];
   snprintf(mood, sizeof mood, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
 
+  char sev[8];
+  if (g_chaos) snprintf(sev, sizeof sev, "CHAOS");
+  else         snprintf(sev, sizeof sev, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
+
   char line[128];
   snprintf(line, sizeof line,
-           "mood: %-15s rate: %u.%02u  severity: %2u/%-2u storm: %-20s",
+           "mood: %-15s rate: %u.%02u  severity: %-5s storm: %-20s",
            mood, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
-           (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1), chan);
+           sev, chan);
 
   bool changed = strcmp(line, lastLine) != 0;
   bool due     = (realNow - lastAt) >= STORM_LOG_STATS;
