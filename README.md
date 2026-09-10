@@ -145,6 +145,41 @@ The **Export** panel has two tabs.
 
 Both use Copy rather than a download — this page is often viewed in a sandboxed frame where browser-initiated downloads are blocked, and a Copy button that always works beats a download link that sometimes does not.
 
+### Logging
+
+The sketch logs to serial at 115200 (matching `monitor_speed` in `platformio.ini`). Every log line is behind one flag:
+
+```c
+#define STORM_LOG  1     // 0 removes all of it
+```
+
+Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the define is `#ifndef`-guarded — drops Serial, the format strings, and the per-frame power measurement entirely. On an ESP32 that is **28 KB of flash and 368 bytes of RAM**, so the off switch is real rather than cosmetic.
+
+Five events are reported:
+
+| Event | When | Why you want it |
+|---|---|---|
+| Boot table | Once at startup | Dumps every segment with its name, indices, role and attachment — confirms the firmware's idea of your routing matches the bench's |
+| `strike` | A channel fires | Names the channel and prints the rolled leader, stroke count, `forkMask` and total duration |
+| `done` | A strike finishes | Pairs with the above so you can see overlap |
+| `DROPPED` | No free strike slot | The `MAX_STRIKES` diagnostic. If you see these, the storm is scheduling faster than it can render |
+| Heartbeat | Every 5 s | Frame rate, active strike count, measured peak draw in mA, and time to the next strike |
+
+Roughly what it looks like:
+
+```
+[storm] StormCloud ready - 300 px, 7 segments, pin 2, master 170
+[storm] segment          start   len   role  attachment
+[storm] Cloud body           0   132  cloud  -
+[storm] Bolt - left        132    38   bolt  root channel
+[storm] Fork - left        170    18   fork  off Bolt - left at 54%
+[storm] strike  Bolt - centre   slot=0 leader=180ms strokes=1 forkMask=0x01 total=1481ms
+[storm]   done  Bolt - centre   after 1482ms
+[storm] 412 fps  active=0  peak draw=3180 mA  next strike in 2204 ms
+```
+
+That peak draw figure comes from FastLED's own `calculate_unscaled_power_mW`, so it is the number to watch against whatever supply you end up using — see below.
+
 ### Hardware notes
 
 **300 pixels will not fit on an AVR Nano.** The frame buffer alone is 900 bytes of a 2 KB budget, before strike state. Use an ESP32, Teensy, or RP2040.
@@ -164,15 +199,29 @@ Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top 
 
 ## Known limits
 
-- **The sketch has not been compiled.** It is a transcription verified by reading, not by a toolchain. Treat the first upload as the real test.
+- **The sketch compiles but has never run on hardware.** `pio run` succeeds clean for `esp32dev` with FastLED 3.9 — no warnings — so the syntax and API use are verified. Timing, colour and the power figures are still unproven on real pixels.
 - Fork nesting is capped at depth 3, in both the preview and the sketch.
 - `MAX_STRIKES` is 6 and `MAX_STROKES` is 6. Push the storm parameters hard enough and strikes will be dropped rather than queued.
 - Preview-only controls — dot size, bloom — model light diffusing through batting. They are not exported, because the controller has no equivalent.
+
+## Building the firmware
+
+```bash
+pio run                 # compile
+pio run -t upload       # flash
+pio device monitor      # watch the log
+```
+
+`platformio.ini` targets `esp32dev`. Re-exporting from the bench overwrites `src/main.cpp`, so anything you hand-edit there — `LED_PIN`, in particular, which the generator always emits as `6` — has to be re-applied afterwards.
 
 ## Files
 
 ```
 lightning-simulator/
-├── index.html    the whole tool
-└── README.md     this file
+├── index.html        the bench: routing, tuning, export
+├── README.md         this file
+├── platformio.ini    ESP32 build config
+└── src/
+    ├── main.cpp      exported sketch
+    └── layout.json   exported routing, re-importable into the bench
 ```

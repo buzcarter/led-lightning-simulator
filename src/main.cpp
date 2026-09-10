@@ -21,7 +21,10 @@
 CRGB leds[NUM_LEDS];
 
 /* ── routing ────────────────────────────────────────────────── */
+#define SEG_NAME_LEN 20       // fixed array, so memcpy_P hands back a usable string
+
 struct Segment {
+  char     name[SEG_NAME_LEN];   // ASCII; folded from the bench's run names
   uint16_t start;
   uint16_t len;
   uint8_t  isBolt;
@@ -40,13 +43,13 @@ struct Segment {
 #define NUM_SEGMENTS 7
 
 const Segment SEGMENTS[NUM_SEGMENTS] PROGMEM = {
-  {   0, 132, 0,  36,  69, -1, 128 },  // Cloud body
-  { 132,  38, 1,  70,  81, -1, 128 },  // Bolt · left
-  { 170,  18, 1,  71, 122,  1, 140 },  // Fork · left — forks off Bolt · left
-  { 188,  44, 1, 129,  85, -1, 128 },  // Bolt · centre
-  { 232,  22, 1, 127, 122,  3, 115 },  // Fork · centre — forks off Bolt · centre
-  { 254,  34, 1, 182,  82, -1, 128 },  // Bolt · right
-  { 288,  12, 1, 194, 116,  5, 102 },  // Fork · right — forks off Bolt · right
+  { "Cloud body",      0, 132, 0,  36,  69, -1, 128 },
+  { "Bolt - left",   132,  38, 1,  70,  81, -1, 128 },
+  { "Fork - left",   170,  18, 1,  71, 122,  1, 140 },  // forks off Bolt - left
+  { "Bolt - centre", 188,  44, 1, 129,  85, -1, 128 },
+  { "Fork - centre", 232,  22, 1, 127, 122,  3, 115 },  // forks off Bolt - centre
+  { "Bolt - right",  254,  34, 1, 182,  82, -1, 128 },
+  { "Fork - right",  288,  12, 1, 194, 116,  5, 102 },  // forks off Bolt - right
 };
 
 // pixel positions, normalised 0..255 across the long axis
@@ -112,6 +115,27 @@ const uint8_t LED_Y[NUM_LEDS] PROGMEM = {
 #define RUMBLE        150
 #define MASTER        170
 #define TINT          19
+
+/* ── logging ────────────────────────────────────────────────── */
+/* Set STORM_LOG to 0 and every line below compiles away to nothing: no
+   Serial, no format strings in flash, no cost in the render loop.
+   Serial.printf is an ESP32 / Teensy / RP2040 core feature, which is the
+   same hardware bracket 300 px already forces you into. */
+#ifndef STORM_LOG
+  #define STORM_LOG      1        // or set -DSTORM_LOG=0 in platformio.ini
+#endif
+#ifndef STORM_LOG_BAUD
+  #define STORM_LOG_BAUD 115200
+#endif
+#ifndef STORM_LOG_STATS
+  #define STORM_LOG_STATS 5000    // ms between heartbeat lines; 0 = off
+#endif
+
+#if STORM_LOG
+  #define LOG(...)  Serial.printf(__VA_ARGS__)
+#else
+  #define LOG(...)  do {} while (0)
+#endif
 
 /* ── helpers ────────────────────────────────────────────────── */
 static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t amt) {
@@ -187,7 +211,21 @@ int8_t freeSlot() {
 }
 void trigger(uint8_t segIdx, uint32_t at) {
   int8_t slot = freeSlot();
-  if (slot >= 0) makeStrike(slot, segIdx, at);
+  if (slot < 0) {
+#if STORM_LOG
+    Segment sg; memcpy_P(&sg, &SEGMENTS[segIdx], sizeof(Segment));
+    LOG("[storm] DROPPED %s — all %u strike slots busy\n", sg.name, (unsigned)MAX_STRIKES);
+#endif
+    return;
+  }
+  makeStrike(slot, segIdx, at);
+#if STORM_LOG
+  const Strike &s = strikes[slot];
+  Segment sg; memcpy_P(&sg, &SEGMENTS[segIdx], sizeof(Segment));
+  LOG("[storm] strike  %-16s slot=%u leader=%ums strokes=%u forkMask=0x%02X total=%ums\n",
+      sg.name, (unsigned)slot, (unsigned)s.leaderMs, (unsigned)s.nStrokes,
+      (unsigned)s.forkMask, (unsigned)s.total);
+#endif
 }
 
 /* ── per-pixel accumulate ───────────────────────────────────── */
@@ -272,7 +310,14 @@ void renderStrike(Strike &s, uint32_t now) {
   if (!s.active) return;
   if (now < s.t0) return;
   uint32_t el = now - s.t0;
-  if (el > s.total) { s.active = false; return; }
+  if (el > s.total) {
+    s.active = false;
+#if STORM_LOG
+    Segment sg; memcpy_P(&sg, &SEGMENTS[s.seg], sizeof(Segment));
+    LOG("[storm]   done  %-16s after %ums\n", sg.name, (unsigned)el);
+#endif
+    return;
+  }
   uint16_t e = (uint16_t)el;
 
   Segment seg; memcpy_P(&seg, &SEGMENTS[s.seg], sizeof(Segment));
@@ -341,11 +386,41 @@ uint8_t randomBolt() {
   return n ? bolts[random8() % n] : 0;
 }
 
+void logBoot() {
+#if STORM_LOG
+  LOG("\n[storm] StormCloud ready — %u px, %u segments, pin %u, master %u\n",
+      (unsigned)NUM_LEDS, (unsigned)NUM_SEGMENTS, (unsigned)LED_PIN, (unsigned)MASTER);
+  LOG("[storm] %-16s %5s %5s %6s  %s\n", "segment", "start", "len", "role", "attachment");
+  for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
+    if (sg.parent < 0) {
+      LOG("[storm] %-16s %5u %5u %6s  %s\n", sg.name, (unsigned)sg.start, (unsigned)sg.len,
+          sg.isBolt ? "bolt" : "cloud", sg.isBolt ? "root channel" : "-");
+    } else {
+      Segment pa; memcpy_P(&pa, &SEGMENTS[sg.parent], sizeof(Segment));
+      LOG("[storm] %-16s %5u %5u %6s  off %s at %u%%\n", sg.name, (unsigned)sg.start,
+          (unsigned)sg.len, "fork", pa.name, (unsigned)(sg.forkAt * 100 / 255));
+    }
+  }
+  LOG("[storm] frame buffer %u B, strike pool %u B, segment table %u B\n\n",
+      (unsigned)sizeof(leds), (unsigned)sizeof(strikes), (unsigned)sizeof(SEGMENTS));
+#endif
+}
+
 void setup() {
+#if STORM_LOG
+  Serial.begin(STORM_LOG_BAUD);
+  uint32_t waited = millis();                 // USB CDC needs a moment to enumerate,
+  while (!Serial && millis() - waited < 1500) { }   // but never hang without a host
+#endif
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(MASTER);
+  // 300 px at full white is ~18 A at 5 V and this animation really does flash
+  // most of the cloud at once. Uncomment to let FastLED hold the peak down:
+  // FastLED.setMaxPowerInVoltsAndMilliamps(5, 4000);
   random16_set_seed(0x1337);            // same seed the bench previewed
   for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
+  logBoot();
 }
 
 void loop() {
@@ -362,6 +437,23 @@ void loop() {
   }
 
   for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
+
+#if STORM_LOG && STORM_LOG_STATS
+  static uint32_t statAt = 0, frames = 0, peakmW = 0;
+  frames++;
+  uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
+  if (mw > peakmW) peakmW = mw;
+  if (now - statAt >= STORM_LOG_STATS) {
+    uint32_t span = now - statAt ? now - statAt : 1;
+    uint8_t act = 0;
+    for (uint8_t i = 0; i < MAX_STRIKES; i++) if (strikes[i].active) act++;
+    LOG("[storm] %lu fps  active=%u  peak draw=%lu mA  next strike in %lu ms\n",
+        (unsigned long)(frames * 1000UL / span), (unsigned)act,
+        (unsigned long)(peakmW / 5),
+        (unsigned long)(nextStrikeAt > now ? nextStrikeAt - now : 0));
+    statAt = now; frames = 0; peakmW = 0;
+  }
+#endif
 
   FastLED.show();
 }
