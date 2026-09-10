@@ -11,7 +11,7 @@
    ───────────────────────────────────────────────────────────── */
 #include <FastLED.h>
 
-#define LED_PIN      2
+#define LED_PIN      GPIO_NUM_2
 #define NUM_LEDS     300
 #define LED_TYPE     WS2812B
 #define COLOR_ORDER  GRB
@@ -43,13 +43,13 @@ struct Segment {
 #define NUM_SEGMENTS 7
 
 const Segment SEGMENTS[NUM_SEGMENTS] PROGMEM = {
-  { "Cloud body",      0, 132, 0,  36,  69, -1, 128 },
-  { "Bolt - left",   132,  38, 1,  70,  81, -1, 128 },
-  { "Fork - left",   170,  18, 1,  71, 122,  1, 140 },  // forks off Bolt - left
-  { "Bolt - centre", 188,  44, 1, 129,  85, -1, 128 },
-  { "Fork - centre", 232,  22, 1, 127, 122,  3, 115 },  // forks off Bolt - centre
-  { "Bolt - right",  254,  34, 1, 182,  82, -1, 128 },
-  { "Fork - right",  288,  12, 1, 194, 116,  5, 102 },  // forks off Bolt - right
+  { "Cloud_Body",            0, 132, 0,  36,  69, -1, 128 },
+  { "Bolt_Left",           132,  38, 1,  70,  81, -1, 128 },
+  { "Bolt_Left_Fork",      170,  18, 1,  71, 122,  1, 140 },
+  { "Bolt_Centre",         188,  44, 1, 129,  85, -1, 128 },
+  { "Bolt_Centre_Fork",    232,  22, 1, 127, 122,  3, 115 },
+  { "Bolt_Right",          254,  34, 1, 182,  82, -1, 128 },
+  { "Bolt_Right_Fork",     288,  12, 1, 194, 116,  5, 102 },
 };
 
 // pixel positions, normalised 0..255 across the long axis
