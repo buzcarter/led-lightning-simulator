@@ -27,12 +27,14 @@ void setup() {
   logBoot();
   controlsBegin();
   chaosBegin();
+  moodBegin();
 }
 
 void loop() {
   controlsUpdate(false);
   uint32_t now = stormClock();     // virtual: the speed knob stretches this
   chaosPoll(millis(), now);        // button in real time, strikes in storm time
+  moodUpdate(millis());
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   renderAmbient(now);

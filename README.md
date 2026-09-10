@@ -269,6 +269,20 @@ The envelope runs in **real** milliseconds while the strikes it schedules run on
 
 The scheduler's gap and double-strike settings became runtime values to make this work, which is a down payment on the severity crossfade — that will drive the same three.
 
+## Mood LED
+
+A discrete 4-leg RGB LED on `GPIO25` / `GPIO26` / `GPIO13`, one PWM channel each, showing the live palette colour. It pulses on every strike and rides up during chaos, so one indicator covers mood, activity and fury. `MOOD_LED_ENABLE 0` compiles it out.
+
+It displays `coolC` — the *saturated* palette colour, not the near-white peak the strip renders at. An indicator showing what the pixels show would be white most of the time and useless.
+
+Two things that bite here:
+
+**`MOOD_COMMON_ANODE` must match the part.** Common cathode puts the long leg on ground and lights on HIGH; common anode puts it on 3.3 V and inverts everything. Multimeter in diode mode, black probe on the long leg — if the other three light in turn, it is common cathode.
+
+**Red will not balance with resistors alone.** At 3.3 V, red sits well above its ~2.0 V forward voltage while green and blue are barely above theirs, so red draws roughly twice the current — but green is about twice as luminous per milliamp, so the two partly cancel and no universal resistor value exists. Start at 220R red, 100R green and blue, then trim `MOOD_GAIN_R/G/B` by eye until white looks white.
+
+The LEDC API changed in Arduino-ESP32 3.x (channels went away, the pin became the handle). The code compiles either side of that; this project is on 2.0.17.
+
 ## Severity and the presets
 
 Worth recording, because the obvious mapping is wrong: **the four bench presets are not one axis.** Distant storm → Rolling → Direct hit is a genuine severity ladder, with Rolling in the middle. Heat lightning is not on it — that is cloud-only sheet lightning with no channel strikes, a different *kind* of storm rather than a milder one. It belongs with the mood knob.

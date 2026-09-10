@@ -40,6 +40,7 @@ uint16_t g_gapMin    = GAP_MIN;
 uint16_t g_gapMax    = GAP_MAX;
 uint8_t  g_dblChance = DBL_CHANCE;
 uint8_t  g_chaos     = 0;              // 0..255, position in the chaos envelope
+uint32_t g_strikeAt  = 0;              // millis of the last strike, for the mood LED
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
 void updatePalette() {
@@ -144,6 +145,7 @@ void trigger(uint8_t segIdx, uint32_t at) {
     return;
   }
   makeStrike(slot, segIdx, at);
+  g_strikeAt = millis();
 }
 
 /* ── per-pixel accumulate ───────────────────────────────────── */

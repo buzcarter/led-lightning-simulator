@@ -1556,6 +1556,106 @@ static const uint16_t SPEED_Q8[SPEED_STEPS] = {
 
 #define POT_LOG_MS       400
 
+/* ── mood LED ───────────────────────────────────────────────── */
+/* A discrete 4-leg RGB LED on three PWM channels, showing which palette is
+   live. It pulses on every strike and rides up during chaos, so one LED
+   reports mood, activity and fury at a glance.
+
+   Set MOOD_COMMON_ANODE to match the part: with a common anode the long leg
+   goes to 3V3 and the channels are driven LOW to light, which is the
+   opposite of a common cathode. If you are unsure, a multimeter in diode
+   mode settles it -- black probe on the long leg, and if each of the other
+   three lights in turn it is a common CATHODE.
+
+   Resistors: one per colour, between each short leg and its GPIO. Red is far
+   more efficient at 3.3 V than green or blue, whose forward voltages sit
+   close to 3.3 V already, so start at 220R red / 100R green / 100R blue. If
+   green and blue still look weak, drop them to 68R -- there is very little
+   headroom above their forward voltage at 3.3 V. */
+#ifndef MOOD_LED_ENABLE
+  #define MOOD_LED_ENABLE 1
+#endif
+#define MOOD_PIN_R        GPIO_NUM_25
+#define MOOD_PIN_G        GPIO_NUM_26
+#define MOOD_PIN_B        GPIO_NUM_13
+#ifndef MOOD_COMMON_ANODE
+  #define MOOD_COMMON_ANODE 0      // 1 if the long leg goes to 3V3
+#endif
+
+#define MOOD_PWM_HZ    4000
+#define MOOD_PWM_BITS  8
+#define MOOD_CH_R      0           // LEDC channels; nothing else here uses them
+#define MOOD_CH_G      1
+#define MOOD_CH_B      2
+
+/* Per-channel trim, set by eye. The right values depend on your resistors and
+   the specific part -- red draws roughly twice the current here, but green is
+   about twice as luminous per milliamp, so the two partly cancel and no
+   universal number exists. Show it white and trim whichever channel shouts. */
+#ifndef MOOD_GAIN_R
+  #define MOOD_GAIN_R  160
+#endif
+#ifndef MOOD_GAIN_G
+  #define MOOD_GAIN_G  255
+#endif
+#ifndef MOOD_GAIN_B
+  #define MOOD_GAIN_B  255
+#endif
+
+#define MOOD_IDLE      110         // resting level of the palette colour
+#define MOOD_PULSE_MS  180         // strike flash decay
+
+#if MOOD_LED_ENABLE
+
+/* The LEDC API changed in Arduino-ESP32 3.x: channels went away and the pin
+   itself became the handle. This works either side of that. */
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  #define MOOD_ATTACH(pin, ch)   ledcAttach((pin), MOOD_PWM_HZ, MOOD_PWM_BITS)
+  #define MOOD_SET(pin, ch, d)   ledcWrite((pin), (d))
+#else
+  #define MOOD_ATTACH(pin, ch)   do { ledcSetup((ch), MOOD_PWM_HZ, MOOD_PWM_BITS); \\
+                                      ledcAttachPin((pin), (ch)); } while (0)
+  #define MOOD_SET(pin, ch, d)   ledcWrite((ch), (d))
+#endif
+
+static inline void moodPut(gpio_num_t pin, uint8_t ch, uint8_t v) {
+  MOOD_SET(pin, ch, MOOD_COMMON_ANODE ? (uint8_t)(255 - v) : v);
+}
+
+void moodBegin() {
+  MOOD_ATTACH(MOOD_PIN_R, MOOD_CH_R);
+  MOOD_ATTACH(MOOD_PIN_G, MOOD_CH_G);
+  MOOD_ATTACH(MOOD_PIN_B, MOOD_CH_B);
+  moodPut(MOOD_PIN_R, MOOD_CH_R, 0);
+  moodPut(MOOD_PIN_G, MOOD_CH_G, 0);
+  moodPut(MOOD_PIN_B, MOOD_CH_B, 0);
+  LOG("[mood]  RGB on GPIO%u/%u/%u, common %s\\n",
+      (unsigned)MOOD_PIN_R, (unsigned)MOOD_PIN_G, (unsigned)MOOD_PIN_B,
+      MOOD_COMMON_ANODE ? "anode" : "cathode");
+}
+
+void moodUpdate(uint32_t realNow) {
+  uint8_t lvl = MOOD_IDLE;
+
+  uint32_t since = realNow - g_strikeAt;
+  if (g_strikeAt && since < MOOD_PULSE_MS) {          // brief flash on each strike
+    uint8_t p = (uint8_t)(255 - since * 255 / MOOD_PULSE_MS);
+    lvl = qadd8(lvl, scale8((uint8_t)(255 - MOOD_IDLE), p));
+  }
+  if (g_chaos) lvl = qadd8(lvl, scale8((uint8_t)(255 - lvl), g_chaos));
+
+  // coolC is the saturated palette colour -- the mood itself, not the
+  // near-white peak the strike renders at
+  moodPut(MOOD_PIN_R, MOOD_CH_R, scale8(scale8(coolC.r, lvl), MOOD_GAIN_R));
+  moodPut(MOOD_PIN_G, MOOD_CH_G, scale8(scale8(coolC.g, lvl), MOOD_GAIN_G));
+  moodPut(MOOD_PIN_B, MOOD_CH_B, scale8(scale8(coolC.b, lvl), MOOD_GAIN_B));
+}
+
+#else
+inline void moodBegin() {}
+inline void moodUpdate(uint32_t) {}
+#endif
+
 /* ── chaos button ───────────────────────────────────────────── */
 /* A momentary button to GND on CHAOS_PIN, using the internal pull-up, so it
    is two wires and no resistor. Do NOT put it on GPIO34-39: those pins have
@@ -1862,6 +1962,7 @@ uint16_t g_gapMin    = GAP_MIN;
 uint16_t g_gapMax    = GAP_MAX;
 uint8_t  g_dblChance = DBL_CHANCE;
 uint8_t  g_chaos     = 0;              // 0..255, position in the chaos envelope
+uint32_t g_strikeAt  = 0;              // millis of the last strike, for the mood LED
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
 void updatePalette() {
@@ -1966,6 +2067,7 @@ void trigger(uint8_t segIdx, uint32_t at) {
     return;
   }
   makeStrike(slot, segIdx, at);
+  g_strikeAt = millis();
 }
 
 /* ── per-pixel accumulate ───────────────────────────────────── */
@@ -2238,12 +2340,14 @@ void setup() {
   logBoot();
   controlsBegin();
   chaosBegin();
+  moodBegin();
 }
 
 void loop() {
   controlsUpdate(false);
   uint32_t now = stormClock();     // virtual: the speed knob stretches this
   chaosPoll(millis(), now);        // button in real time, strikes in storm time
+  moodUpdate(millis());
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   renderAmbient(now);

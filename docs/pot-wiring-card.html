@@ -111,7 +111,7 @@ footer p{margin:0 0 7px}
 <header>
   <div class="eyebrow">Bolt Bench · storm controller</div>
   <h1>Pot Wiring Card</h1>
-  <p class="sub">Three B10K linear pots and a chaos button into an ESP32 DevKit.</p>
+  <p class="sub">Three B10K linear pots, a chaos button and a mood LED into an ESP32 DevKit.</p>
 </header>
 
 <div class="danger">
@@ -213,7 +213,43 @@ footer p{margin:0 0 7px}
 <p class="note"><strong>Do not put it on GPIO34–39.</strong> Those pins have no internal pull-ups and would need an external one. Any ordinary output-capable pin works: 13, 14, 25, 26, 27, 33.</p>
 <p class="note">A tap fires every root channel at once, staggered 90 ms apart so it reads as a cascade rather than one white frame, then holds the storm at maximum for 2.5 s and eases back to your knob positions over another 2 s. Tapping again restarts it. The dashboard shows <code>severity: CHAOS</code> while it runs.</p>
 
-<h2>Six wires, not eleven</h2>
+<h2>Mood LED</h2>
+<figure>
+<svg viewBox="0 0 440 252" role="img" aria-label="Four leg RGB LED with red, green and blue anodes driven through resistors from three GPIO pins, common cathode to ground">
+  <rect x="214" y="40" width="86" height="140" rx="8" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="14" y="67" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--v33)">GPIO25</text>
+  <line x1="76" y1="62" x2="106" y2="62" stroke="var(--ink-2)" stroke-width="2"/>
+  <rect x="106" y="51" width="46" height="22" rx="2" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="129" y="66" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">220R</text>
+  <line x1="152" y1="62" x2="214" y2="62" stroke="var(--ink-2)" stroke-width="2"/>
+  <circle cx="246" cy="62" r="7" fill="var(--v33)"/>
+  <text x="264" y="66" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">R</text>
+  <text x="14" y="115" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--sig2)">GPIO26</text>
+  <line x1="76" y1="110" x2="106" y2="110" stroke="var(--ink-2)" stroke-width="2"/>
+  <rect x="106" y="99" width="46" height="22" rx="2" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="129" y="114" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">100R</text>
+  <line x1="152" y1="110" x2="214" y2="110" stroke="var(--ink-2)" stroke-width="2"/>
+  <circle cx="246" cy="110" r="7" fill="var(--sig2)"/>
+  <text x="264" y="114" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">G</text>
+  <text x="14" y="163" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--sig)">GPIO13</text>
+  <line x1="76" y1="158" x2="106" y2="158" stroke="var(--ink-2)" stroke-width="2"/>
+  <rect x="106" y="147" width="46" height="22" rx="2" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="129" y="162" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">100R</text>
+  <line x1="152" y1="158" x2="214" y2="158" stroke="var(--ink-2)" stroke-width="2"/>
+  <circle cx="246" cy="158" r="7" fill="var(--sig)"/>
+  <text x="264" y="162" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">B</text>
+  <line x1="257" y1="180" x2="257" y2="212" stroke="var(--gnd)" stroke-width="2.4"/>
+  <line x1="257" y1="212" x2="352" y2="212" stroke="var(--gnd)" stroke-width="2.4"/>
+  <circle cx="352" cy="212" r="4.5" fill="var(--gnd)"/>
+  <text x="364" y="216" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="500" fill="var(--gnd)">GND</text>
+  <text x="14" y="240" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">4-leg RGB, common cathode - the long leg</text>
+</svg>
+<figcaption>Shown common cathode: the long leg goes to ground and a channel lights when driven HIGH. If yours is common <em>anode</em>, that leg goes to 3V3 instead and the logic inverts — set <code>MOOD_COMMON_ANODE 1</code> and nothing else changes. Unsure? Multimeter in diode mode, black probe on the long leg: if each of the other three lights in turn, it is common cathode.</figcaption>
+</figure>
+<p class="note">Red is far more efficient at 3.3 V than green or blue, whose forward voltages sit close to 3.3 V already — hence the larger resistor on red. If green and blue still look weak, drop them to 68R. Final balance is done in software with <code>MOOD_GAIN_R/G/B</code>, not by hunting for another resistor.</p>
+<p class="note">The LED shows the live palette colour, pulses on every strike, and rides up during chaos — one indicator covering mood, activity and fury.</p>
+
+<h2>Nine wires, not fifteen</h2>
 <ul class="loom">
   <li><span class="dot" style="background:var(--v33)"></span> 3.3 V — daisy-chain to all three <code>pin 3</code> <span class="to">1 wire</span></li>
   <li><span class="dot" style="background:var(--gnd)"></span> Ground — daisy-chain to all three <code>pin 1</code> <span class="to">1 wire</span></li>
@@ -221,7 +257,11 @@ footer p{margin:0 0 7px}
   <li><span class="dot" style="background:var(--sig2)"></span> Speed wiper <span class="to">GPIO33</span></li>
   <li><span class="dot" style="background:var(--sig3)"></span> Level wiper <span class="to">GPIO34</span></li>
   <li><span class="dot" style="background:var(--ink-2)"></span> Chaos button — other leg to the ground rail <span class="to">GPIO27</span></li>
+  <li><span class="dot" style="background:var(--v33)"></span> Mood LED red, via 220R <span class="to">GPIO25</span></li>
+  <li><span class="dot" style="background:var(--sig2)"></span> Mood LED green, via 100R <span class="to">GPIO26</span></li>
+  <li><span class="dot" style="background:var(--sig)"></span> Mood LED blue, via 100R <span class="to">GPIO13</span></li>
 </ul>
+<p class="note">The LED's common leg needs no wire of its own — it lands on the ground rail already there (or the 3.3 V rail, if yours is common anode).</p>
 <p class="note">Chain the two rails pot-to-pot inside the box so only five conductors leave it. Zip-tie a strain relief where the loom exits — panel pots have an anti-rotation tab, so either drill a 2 mm hole for it or snip it off, otherwise the pot spins in the panel and shears the wires.</p>
 
 <h2>Test before writing any code</h2>
