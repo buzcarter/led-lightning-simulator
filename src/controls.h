@@ -66,17 +66,25 @@ static const uint16_t SPEED_Q8[SPEED_STEPS] = {
    live. It pulses on every strike and rides up during chaos, so one LED
    reports mood, activity and fury at a glance.
 
-   Set MOOD_COMMON_ANODE to match the part: with a common anode the long leg
-   goes to 3V3 and the channels are driven LOW to light, which is the
-   opposite of a common cathode. If you are unsure, a multimeter in diode
-   mode settles it -- black probe on the long leg, and if each of the other
-   three lights in turn it is a common CATHODE.
+   Pinout of the usual 5 mm part (the one in the Elegoo starter kit): from the
+   flat side, RED - CATHODE - GREEN - BLUE. The cathode is second and is the
+   longest of the four leads. That is a common CATHODE, so MOOD_COMMON_ANODE
+   stays 0. If yours is an anode part the long leg goes to 3V3 instead and the
+   logic inverts; a multimeter in diode mode settles it -- black probe on the
+   long leg, and if the other three light in turn it is a cathode.
 
-   Resistors: one per colour, between each short leg and its GPIO. Red is far
-   more efficient at 3.3 V than green or blue, whose forward voltages sit
-   close to 3.3 V already, so start at 220R red / 100R green / 100R blue. If
-   green and blue still look weak, drop them to 68R -- there is very little
-   headroom above their forward voltage at 3.3 V. */
+   Resistors: one per colour, between each short leg and its GPIO.
+
+   DO NOT use the 220R-on-all-three that starter-kit lessons specify. That is
+   a 5 V figure. Red drops about 2.0 V, green and blue nearer 2.9 V, so at
+   3.3 V a uniform 220R gives red 5.9 mA, green 1.8 mA and blue 1.4 mA -- red
+   four times the others, and blue looking dead. Size them per colour:
+
+       red    220R  ->  5.9 mA
+       green   68R  ->  5.9 mA
+       blue    68R  ->  4.4 mA
+
+   Get the resistors right first. Only then trim the gains below. */
 #ifndef MOOD_LED_ENABLE
   #define MOOD_LED_ENABLE 1
 #endif
@@ -93,12 +101,13 @@ static const uint16_t SPEED_Q8[SPEED_STEPS] = {
 #define MOOD_CH_G      1
 #define MOOD_CH_B      2
 
-/* Per-channel trim, set by eye. The right values depend on your resistors and
-   the specific part -- red draws roughly twice the current here, but green is
-   about twice as luminous per milliamp, so the two partly cancel and no
-   universal number exists. Show it white and trim whichever channel shouts. */
+/* Per-channel trim, set by eye, and only after the resistors are sized. With
+   the values above the three channels draw roughly the same current, so there
+   is no a-priori winner to correct for -- but the eye is far more sensitive to
+   green than to blue, so expect to pull green down rather than push blue up.
+   Show it white and trim whichever channel shouts. */
 #ifndef MOOD_GAIN_R
-  #define MOOD_GAIN_R  160
+  #define MOOD_GAIN_R  255
 #endif
 #ifndef MOOD_GAIN_G
   #define MOOD_GAIN_G  255

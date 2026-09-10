@@ -227,14 +227,14 @@ footer p{margin:0 0 7px}
   <text x="14" y="115" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--sig2)">GPIO26</text>
   <line x1="76" y1="110" x2="106" y2="110" stroke="var(--ink-2)" stroke-width="2"/>
   <rect x="106" y="99" width="46" height="22" rx="2" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
-  <text x="129" y="114" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">100R</text>
+  <text x="129" y="114" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">68R</text>
   <line x1="152" y1="110" x2="214" y2="110" stroke="var(--ink-2)" stroke-width="2"/>
   <circle cx="246" cy="110" r="7" fill="var(--sig2)"/>
   <text x="264" y="114" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">G</text>
   <text x="14" y="163" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--sig)">GPIO13</text>
   <line x1="76" y1="158" x2="106" y2="158" stroke="var(--ink-2)" stroke-width="2"/>
   <rect x="106" y="147" width="46" height="22" rx="2" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
-  <text x="129" y="162" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">100R</text>
+  <text x="129" y="162" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">68R</text>
   <line x1="152" y1="158" x2="214" y2="158" stroke="var(--ink-2)" stroke-width="2"/>
   <circle cx="246" cy="158" r="7" fill="var(--sig)"/>
   <text x="264" y="162" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">B</text>
@@ -242,11 +242,18 @@ footer p{margin:0 0 7px}
   <line x1="257" y1="212" x2="352" y2="212" stroke="var(--gnd)" stroke-width="2.4"/>
   <circle cx="352" cy="212" r="4.5" fill="var(--gnd)"/>
   <text x="364" y="216" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="500" fill="var(--gnd)">GND</text>
-  <text x="14" y="240" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">4-leg RGB, common cathode - the long leg</text>
+  <text x="14" y="240" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">from the flat side: RED - CATHODE - GREEN - BLUE</text>
 </svg>
-<figcaption>Shown common cathode: the long leg goes to ground and a channel lights when driven HIGH. If yours is common <em>anode</em>, that leg goes to 3V3 instead and the logic inverts — set <code>MOOD_COMMON_ANODE 1</code> and nothing else changes. Unsure? Multimeter in diode mode, black probe on the long leg: if each of the other three lights in turn, it is common cathode.</figcaption>
+<figcaption>Common cathode: the long leg is second from the flat side, goes to ground, and a channel lights when driven HIGH. If yours is common <em>anode</em>, that leg goes to 3V3 instead and the logic inverts — set <code>MOOD_COMMON_ANODE 1</code> and nothing else changes. Unsure? Multimeter in diode mode, black probe on the long leg: if each of the other three lights in turn, it is common cathode.</figcaption>
 </figure>
-<p class="note">Red is far more efficient at 3.3 V than green or blue, whose forward voltages sit close to 3.3 V already — hence the larger resistor on red. If green and blue still look weak, drop them to 68R. Final balance is done in software with <code>MOOD_GAIN_R/G/B</code>, not by hunting for another resistor.</p>
+<p class="note"><strong>Ignore the 220R-on-all-three that starter-kit lessons specify — that is a 5 V figure.</strong> Red drops about 2.0 V while green and blue drop nearer 2.9 V, so at 3.3 V a uniform 220R gives red 5.9 mA, green 1.8 mA and blue 1.4 mA. Red four times the others, and blue looking dead.</p>
+<table>
+  <tr><th>Colour</th><th>Vf</th><th>Resistor</th><th>Current at 3.3 V</th></tr>
+  <tr><td class="k">Red</td><td class="k">2.0 V</td><td class="k">220R</td><td class="k">5.9 mA</td></tr>
+  <tr><td class="k">Green</td><td class="k">2.9 V</td><td class="k">68R</td><td class="k">5.9 mA</td></tr>
+  <tr><td class="k">Blue</td><td class="k">3.0 V</td><td class="k">68R</td><td class="k">4.4 mA</td></tr>
+</table>
+<p class="note">Get the resistors right first; only then trim <code>MOOD_GAIN_R/G/B</code> by eye. With these values the currents roughly match, so expect to pull <em>green</em> down rather than push blue up — the eye is far more sensitive to green.</p>
 <p class="note">The LED shows the live palette colour, pulses on every strike, and rides up during chaos — one indicator covering mood, activity and fury.</p>
 
 <h2>Nine wires, not fifteen</h2>
@@ -258,8 +265,8 @@ footer p{margin:0 0 7px}
   <li><span class="dot" style="background:var(--sig3)"></span> Level wiper <span class="to">GPIO34</span></li>
   <li><span class="dot" style="background:var(--ink-2)"></span> Chaos button — other leg to the ground rail <span class="to">GPIO27</span></li>
   <li><span class="dot" style="background:var(--v33)"></span> Mood LED red, via 220R <span class="to">GPIO25</span></li>
-  <li><span class="dot" style="background:var(--sig2)"></span> Mood LED green, via 100R <span class="to">GPIO26</span></li>
-  <li><span class="dot" style="background:var(--sig)"></span> Mood LED blue, via 100R <span class="to">GPIO13</span></li>
+  <li><span class="dot" style="background:var(--sig2)"></span> Mood LED green, via 68R <span class="to">GPIO26</span></li>
+  <li><span class="dot" style="background:var(--sig)"></span> Mood LED blue, via 68R <span class="to">GPIO13</span></li>
 </ul>
 <p class="note">The LED's common leg needs no wire of its own — it lands on the ground rail already there (or the 3.3 V rail, if yours is common anode).</p>
 <p class="note">Chain the two rails pot-to-pot inside the box so only five conductors leave it. Zip-tie a strain relief where the loom exits — panel pots have an anti-rotation tab, so either drill a 2 mm hole for it or snip it off, otherwise the pot spins in the panel and shears the wires.</p>

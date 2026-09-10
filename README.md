@@ -279,7 +279,9 @@ Two things that bite here:
 
 **`MOOD_COMMON_ANODE` must match the part.** Common cathode puts the long leg on ground and lights on HIGH; common anode puts it on 3.3 V and inverts everything. Multimeter in diode mode, black probe on the long leg — if the other three light in turn, it is common cathode.
 
-**Red will not balance with resistors alone.** At 3.3 V, red sits well above its ~2.0 V forward voltage while green and blue are barely above theirs, so red draws roughly twice the current — but green is about twice as luminous per milliamp, so the two partly cancel and no universal resistor value exists. Start at 220R red, 100R green and blue, then trim `MOOD_GAIN_R/G/B` by eye until white looks white.
+**Do not use the 220R-on-all-three that starter-kit lessons specify** — that is a 5 V figure. Red drops about 2.0 V while green and blue drop nearer 2.9 V, so at 3.3 V a uniform 220R gives red 5.9 mA, green 1.8 mA and blue 1.4 mA: red four times the others, and blue looking dead. Size them per colour — 220R red, 68R green, 68R blue — which brings the three to 5.9 / 5.9 / 4.4 mA. Only then trim `MOOD_GAIN_R/G/B` by eye, and expect to pull *green* down rather than push blue up, since the eye is far more sensitive to green.
+
+The usual 5 mm part (including the one in the Elegoo starter kit) is **common cathode**, with the pinout `RED · CATHODE · GREEN · BLUE` from the flat side and the cathode the longest lead — so the default `MOOD_COMMON_ANODE 0` is correct for it.
 
 The LEDC API changed in Arduino-ESP32 3.x (channels went away, the pin became the handle). The code compiles either side of that; this project is on 2.0.17.
 
