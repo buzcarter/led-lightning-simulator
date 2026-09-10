@@ -251,6 +251,10 @@ Three decisions worth knowing about, because the obvious version of each is wron
 
 A one-count hysteresis sits on the output. Without it the bottom bit dithers and the hue crawls while nobody is touching anything.
 
+**Level runs in detents, hue and speed do not.** `LEVEL_STEPS` is 21 — 5% increments across 0–100%, which is 21 stops rather than 20, since 0–19 would top out at 95% and never reach full. Both brightness now and storm severity later read the same `g_level`, so they share one set of detents.
+
+Quantising needs its own, wider hysteresis: park a knob exactly on a boundary and a few counts of ADC noise will flip it between two detents forever. The detent only changes once the knob has moved three quarters of a step. Simulated across a full sweep in both directions, all 21 detents are reachable one step at a time, with zero flips while parked on a boundary under ±3 counts of noise.
+
 ## Building the firmware
 
 ```bash

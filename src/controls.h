@@ -46,6 +46,11 @@
 #define POT_SPEED_OCTAVES  2.0f
 #define POT_SPEED_SNAP     6      // counts either side of centre that snap to 1.00x
 
+/* Brightness at detent 0. Not zero — a knob position that makes the whole
+   costume look broken is rarely what you want at the bottom of the travel.
+   Set to 0 if you would rather the knob be an off switch. */
+#define POT_LEVEL_FLOOR  20
+
 #define POT_LOG_MS     250        // rate limit; turning a knob must not flood the port
 
 #if POTS_ENABLE
@@ -82,6 +87,23 @@ static inline uint8_t potRead(Pot &p) {
   return p.out;
 }
 
+/* Snap a 0..255 reading to one of `steps` detents, holding the current one
+   until the knob has moved three quarters of a step. Quantising without that
+   hysteresis is worse than not quantising at all: park the knob on a boundary
+   and ADC noise flips it between two detents forever. */
+static uint8_t levelHeld = 0;
+
+static inline uint8_t potDetent(uint8_t v, uint8_t steps, uint8_t &held) {
+  if (steps < 2) return 0;
+  uint16_t width  = 255 / (steps - 1);
+  int16_t  centre = (int16_t)((uint16_t)held * 255 / (steps - 1));
+  int16_t  d = (int16_t)v - centre;
+  if (d < 0) d = -d;
+  if (d > (int16_t)(width * 3 / 4))
+    held = (uint8_t)(((uint32_t)v * (steps - 1) + 127) / 255);
+  return held;
+}
+
 static inline void potPrime(Pot &p) {
   p.ema = potSample(p);
   p.out = potScale(p);
@@ -112,20 +134,25 @@ void controlsUpdate(bool force) {
   uint16_t q8 = (uint16_t)(256.0f * powf(2.0f, ((int)sp - 128) / 128.0f * POT_SPEED_OCTAVES) + 0.5f);
   if (force || q8 != lastSpeed) { lastSpeed = q8; g_speedQ8 = q8; }
 
-  // Placeholder: a plain dimmer until the severity crossfade lands, at which
-  // point this knob moves gap, stroke count, leader speed and afterglow
-  // together instead.
+  // Level is quantised to LEVEL_STEPS detents (see storm.h). Placeholder
+  // behaviour is a plain dimmer; once the severity crossfade lands this same
+  // g_level will move gap, stroke count, leader speed and afterglow together.
+  g_level = potDetent(potLevel.out, LEVEL_STEPS, levelHeld);
+
   uint8_t ceil8 = scale8(MASTER, TRIM);
-  uint8_t b = (uint8_t)(20 + ((uint32_t)potLevel.out * (ceil8 > 20 ? ceil8 - 20 : 0) / 255));
+  uint8_t span  = ceil8 > POT_LEVEL_FLOOR ? ceil8 - POT_LEVEL_FLOOR : 0;
+  uint8_t b = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
   if (force || b != g_bright) { g_bright = b; FastLED.setBrightness(b); }
 
 #if STORM_LOG
   if (millis() - loggedAt >= POT_LOG_MS) {
     static uint8_t ph = 255, pl = 255; static uint16_t pq = 0;
-    if (force || potHue.out != ph || potLevel.out != pl || g_speedQ8 != pq) {
-      ph = potHue.out; pl = potLevel.out; pq = g_speedQ8;
-      LOG("[pots]  hue=%-3u speed=%u.%02ux bright=%-3u\n", (unsigned)ph,
-          (unsigned)(pq >> 8), (unsigned)((pq & 0xFF) * 100 / 256), (unsigned)g_bright);
+    if (force || potHue.out != ph || g_level != pl || g_speedQ8 != pq) {
+      ph = potHue.out; pl = g_level; pq = g_speedQ8;
+      LOG("[pots]  hue=%-3u speed=%u.%02ux level=%2u/%u (%u%%) bright=%-3u\n",
+          (unsigned)ph, (unsigned)(pq >> 8), (unsigned)((pq & 0xFF) * 100 / 256),
+          (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1),
+          (unsigned)LEVEL_PERCENT(g_level), (unsigned)g_bright);
       loggedAt = millis();
     }
   }

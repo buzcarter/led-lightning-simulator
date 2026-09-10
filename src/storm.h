@@ -16,10 +16,19 @@ CRGB coolC, hotC;
    a knob can move has to live in RAM rather than as a #define; everything
    else stays a compile-time constant. Silent — updatePalette() is called on
    every hue change, so logging here would flood the port while you turn. */
+/* Level runs in detents rather than continuously: 5% increments over
+   0..100% is 21 stops (0, 5, 10 ... 100), not 20 — indices 0..19 would top
+   out at 95% and never reach full. Drop this to 20 if you would rather have
+   the cap. Both brightness now and storm severity later read g_level, so
+   they share one set of detents. */
+#define LEVEL_STEPS   21
+#define LEVEL_PERCENT(i)  ((uint16_t)(i) * 100 / (LEVEL_STEPS - 1))
+
 uint8_t  g_hue    = HUE;
 uint8_t  g_sat    = SAT;
 uint8_t  g_hotSat = HOT_SAT;
 uint8_t  g_bright = 0;                 // resolved in setup()
+uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
 void updatePalette() {
