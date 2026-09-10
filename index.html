@@ -1,0 +1,1645 @@
+<title>Bolt Bench</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --void:#080b11;
+  --stage:#0b0f17;
+  --panel:#131926;
+  --raise:#1b2231;
+  --raise-hi:#232c3d;
+  --line:#28313f;
+  --line-soft:#1c2431;
+  --ink:#e2e8f4;
+  --dim:#8794a9;
+  --faint:#5c6879;
+  --volt:#82c8ff;
+  --volt-deep:#3a7fb8;
+  --armed:#f0a94c;
+  --live:#63d69a;
+  --ui:"Archivo","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--void);color:var(--ink);
+  font-family:var(--ui);font-size:13px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0.01ms!important}}
+
+/* ── shell ───────────────────────────────────────────── */
+.app{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 352px;
+  grid-template-rows:auto minmax(0,1fr);
+  height:100dvh;
+}
+.rail{
+  grid-column:1/-1;
+  display:flex;align-items:center;gap:18px;
+  padding:0 16px;height:52px;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+.mark{display:flex;align-items:baseline;gap:9px;flex:none}
+.mark b{
+  font-weight:700;font-stretch:118%;letter-spacing:.055em;
+  font-size:16px;text-transform:uppercase;
+}
+.mark span{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.08em}
+.rail .sep{width:1px;height:26px;background:var(--line);flex:none}
+
+.transport{display:flex;align-items:center;gap:6px}
+.btn{
+  background:var(--raise);border:1px solid var(--line);border-radius:3px;
+  padding:5px 11px;cursor:pointer;color:var(--ink);
+  font-size:12px;font-weight:500;letter-spacing:.01em;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.btn:hover{background:var(--raise-hi);border-color:#33404f}
+.btn:active{transform:translateY(1px)}
+.btn.on{background:var(--volt-deep);border-color:var(--volt);color:#eaf5ff}
+.btn.mono{font-family:var(--mono);font-size:11px}
+.btn.strike{
+  border-color:#5b4622;background:#2a2113;color:var(--armed);
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+}
+.btn.strike:hover{background:#3a2c17;border-color:var(--armed)}
+.btn.tiny{padding:2px 7px;font-size:11px;font-family:var(--mono)}
+
+.rate{display:flex;align-items:center;gap:8px}
+.rate label{
+  font-family:var(--mono);font-size:10px;color:var(--faint);
+  text-transform:uppercase;letter-spacing:.09em;
+}
+.rate input[type=range]{width:96px}
+.rate output{font-family:var(--mono);font-size:11px;color:var(--volt);width:42px}
+
+.budget{margin-left:auto;display:flex;align-items:center;gap:14px}
+.gauge{display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+.gauge b{font-family:var(--mono);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
+.gauge b em{font-style:normal;color:var(--faint)}
+.gauge .track{width:132px;height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.gauge .fill{height:100%;background:var(--volt);transition:width .18s}
+.gauge .fill.over{background:#e0575a}
+.gauge small{
+  font-family:var(--mono);font-size:9.5px;color:var(--faint);
+  letter-spacing:.09em;text-transform:uppercase;
+}
+
+/* ── stage column ────────────────────────────────────── */
+.left{
+  min-width:0;display:grid;
+  grid-template-rows:minmax(0,1fr) auto auto;
+  background:var(--stage);
+}
+.stage{position:relative;min-height:0;overflow:hidden}
+.stage canvas{display:block;width:100%;height:100%;cursor:crosshair}
+.stage.editing canvas{cursor:copy}
+.hud{
+  position:absolute;left:14px;top:12px;display:flex;gap:6px;align-items:center;
+  pointer-events:none;
+}
+.hud .chip{
+  pointer-events:auto;
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  padding:4px 9px;border-radius:2px;border:1px solid var(--line);
+  background:rgba(11,15,23,.82);color:var(--dim);backdrop-filter:blur(4px);
+}
+.hud .chip.act{color:var(--armed);border-color:#5b4622}
+.hint{
+  position:absolute;left:14px;bottom:12px;
+  font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.03em;
+  background:rgba(11,15,23,.75);padding:4px 8px;border-radius:2px;
+}
+.hint kbd{
+  font-family:var(--mono);color:var(--dim);background:var(--raise);
+  border:1px solid var(--line);border-radius:2px;padding:0 4px;font-size:10px;
+}
+
+.readout{border-top:1px solid var(--line-soft);background:var(--panel);padding:9px 16px 4px}
+.readout canvas{display:block;width:100%;height:76px;image-rendering:pixelated}
+.scope{border-top:1px solid var(--line-soft);background:var(--panel);padding:6px 16px 10px}
+.scope canvas{display:block;width:100%;height:74px}
+.striphdr{
+  display:flex;align-items:baseline;gap:10px;margin-bottom:6px;
+  font-family:var(--mono);font-size:9.5px;color:var(--faint);
+  letter-spacing:.1em;text-transform:uppercase;
+}
+.striphdr i{font-style:normal;color:var(--dim);letter-spacing:.03em;text-transform:none;font-size:10.5px}
+
+/* ── instrument panel ────────────────────────────────── */
+.panel{
+  background:var(--panel);border-left:1px solid var(--line);
+  overflow-y:auto;min-height:0;
+}
+.panel::-webkit-scrollbar{width:9px}
+.panel::-webkit-scrollbar-thumb{background:var(--raise-hi);border-radius:5px}
+.panel::-webkit-scrollbar-track{background:var(--panel)}
+
+details{border-bottom:1px solid var(--line-soft)}
+summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;
+  padding:11px 16px;
+  font-size:10.5px;font-weight:600;font-stretch:112%;
+  text-transform:uppercase;letter-spacing:.13em;color:var(--dim);
+  transition:color .12s;
+}
+summary::-webkit-details-marker{display:none}
+summary:hover{color:var(--ink)}
+summary::before{
+  content:"";width:5px;height:5px;flex:none;border-radius:1px;
+  background:var(--faint);transition:background .12s,transform .15s;
+}
+details[open]>summary::before{background:var(--volt);transform:rotate(45deg)}
+details[open]>summary{color:var(--ink)}
+summary .note{
+  margin-left:auto;font-family:var(--mono);font-size:10px;
+  letter-spacing:.04em;text-transform:none;color:var(--faint);font-weight:400;
+}
+.body{padding:2px 16px 16px}
+
+/* routing list */
+.runs{display:flex;flex-direction:column;gap:5px}
+.run{
+  border:1px solid var(--line);border-radius:3px;background:var(--raise);
+  padding:7px 8px 8px;transition:border-color .12s;
+}
+.run.sel{border-color:var(--volt-deep);background:#18202e}
+.run-top{display:flex;align-items:center;gap:7px}
+.swatch{width:9px;height:9px;border-radius:50%;flex:none;box-shadow:0 0 7px currentColor;background:currentColor}
+.run-name{
+  flex:1;background:none;border:none;padding:2px 3px;min-width:0;
+  font-size:12.5px;font-weight:500;border-radius:2px;
+}
+.run-name:hover{background:var(--raise-hi)}
+.run-meta{
+  display:flex;align-items:center;gap:8px;margin-top:5px;
+  font-family:var(--mono);font-size:10.5px;color:var(--faint);
+}
+.run-meta .idx{color:var(--dim);font-variant-numeric:tabular-nums}
+.run-meta input[type=number]{
+  width:52px;background:var(--void);border:1px solid var(--line);border-radius:2px;
+  padding:2px 5px;font-family:var(--mono);font-size:10.5px;text-align:right;
+}
+.run-meta .role{
+  background:var(--void);border:1px solid var(--line);border-radius:2px;
+  padding:2px 4px;font-family:var(--mono);font-size:10px;color:var(--dim);
+}
+.run-acts{margin-left:auto;display:flex;gap:3px}
+.iconbtn{
+  background:none;border:1px solid transparent;border-radius:2px;
+  color:var(--faint);cursor:pointer;padding:1px 5px;
+  font-family:var(--mono);font-size:11px;line-height:1.4;
+}
+.iconbtn:hover{color:var(--ink);border-color:var(--line);background:var(--raise-hi)}
+.iconbtn.fire:hover{color:var(--armed);border-color:#5b4622}
+.iconbtn.del:hover{color:#e0575a;border-color:#5c2a2c}
+
+/* params */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:11px 14px}
+.p{display:flex;flex-direction:column;gap:3px}
+.p.wide{grid-column:1/-1}
+.p .lab{
+  display:flex;justify-content:space-between;align-items:baseline;gap:6px;
+  font-size:11px;color:var(--dim);
+}
+.p .lab output{
+  font-family:var(--mono);font-size:10.5px;color:var(--volt);
+  font-variant-numeric:tabular-nums;
+}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:16px;
+  background:transparent;cursor:pointer;margin:0;
+}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-moz-range-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:11px;height:11px;border-radius:50%;
+  background:var(--ink);border:none;margin-top:-4.5px;
+  transition:background .12s,box-shadow .12s;
+}
+input[type=range]::-moz-range-thumb{
+  width:11px;height:11px;border-radius:50%;background:var(--ink);border:none;
+}
+input[type=range]:hover::-webkit-slider-thumb{background:var(--volt);box-shadow:0 0 8px rgba(130,200,255,.55)}
+input[type=range]:hover::-moz-range-thumb{background:var(--volt)}
+
+.presets{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:13px}
+.presets .btn{padding:4px 9px;font-size:11px}
+
+.toggle{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.toggle input{width:14px;height:14px;accent-color:var(--volt);cursor:pointer}
+.toggle label{font-size:12px;cursor:pointer}
+
+/* export */
+.tabs{display:flex;gap:4px;margin-bottom:9px}
+.tabs .btn{padding:4px 9px;font-size:11px;font-family:var(--mono)}
+pre.code{
+  margin:0;background:var(--void);border:1px solid var(--line);border-radius:3px;
+  padding:10px 11px;max-height:270px;overflow:auto;
+  font-family:var(--mono);font-size:10.5px;line-height:1.6;color:#b9c6da;
+  white-space:pre;tab-size:2;
+}
+pre.code::-webkit-scrollbar{width:9px;height:9px}
+pre.code::-webkit-scrollbar-thumb{background:var(--raise-hi);border-radius:5px}
+.exp-acts{display:flex;gap:6px;align-items:center;margin-top:8px}
+.exp-acts .said{font-family:var(--mono);font-size:10.5px;color:var(--live)}
+textarea.paste{
+  width:100%;height:66px;resize:vertical;margin-top:9px;
+  background:var(--void);border:1px solid var(--line);border-radius:3px;
+  padding:7px 9px;font-family:var(--mono);font-size:10.5px;color:var(--dim);
+}
+.blurb{font-size:11.5px;color:var(--faint);line-height:1.55;margin:0 0 11px}
+.blurb code{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+
+@media (max-width:1000px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 62vh auto;height:auto}
+  .panel{border-left:none;border-top:1px solid var(--line);overflow:visible}
+  .budget{display:none}
+}
+</style>
+
+<div class="app">
+  <header class="rail">
+    <div class="mark"><b>Bolt&nbsp;Bench</b><span>WS2812B · 300px</span></div>
+    <div class="sep"></div>
+    <div class="transport">
+      <button class="btn on" id="play">Pause</button>
+      <button class="btn mono" id="step">+1f</button>
+      <button class="btn strike" id="fire">Strike</button>
+      <button class="btn mono" id="storm">Storm</button>
+    </div>
+    <div class="sep"></div>
+    <div class="rate">
+      <label for="speed">Rate</label>
+      <input type="range" id="speed" min="3" max="200" value="100">
+      <output id="speedOut">1.00×</output>
+    </div>
+    <div class="budget">
+      <div class="gauge">
+        <b id="budgetNum">300<em>/300</em></b>
+        <div class="track"><div class="fill" id="budgetFill" style="width:100%"></div></div>
+        <small id="budgetNote">strip allocated</small>
+      </div>
+    </div>
+  </header>
+
+  <div class="left">
+    <div class="stage" id="stageWrap">
+      <canvas id="stage"></canvas>
+      <div class="hud">
+        <span class="chip" id="modeChip">Preview</span>
+        <span class="chip" id="clockChip">0.00 s</span>
+      </div>
+      <div class="hint" id="hint">Click a bolt to fire it · <kbd>Space</kbd> play/pause · <kbd>S</kbd> strike</div>
+    </div>
+
+    <div class="readout">
+      <div class="striphdr">
+        <span>Controller output</span>
+        <i id="stripInfo">leds[0…299] · GRB</i>
+      </div>
+      <canvas id="strip"></canvas>
+    </div>
+
+    <div class="scope">
+      <canvas id="scope"></canvas>
+    </div>
+  </div>
+
+  <aside class="panel">
+    <details open>
+      <summary>Routing <span class="note" id="routeNote"></span></summary>
+      <div class="body">
+        <p class="blurb">Each run is a length of rope in wiring order. Draw it on the stage, or paste an SVG <code>d</code> from Illustrator. LED indices follow automatically.</p>
+        <div class="runs" id="runs"></div>
+        <div class="exp-acts">
+          <button class="btn tiny" id="addCloud">+ cloud run</button>
+          <button class="btn tiny" id="addBolt">+ bolt</button>
+          <button class="btn tiny" id="resetLayout">Reset layout</button>
+        </div>
+        <textarea class="paste" id="dPaste" placeholder="Paste an SVG path d= for the selected run (viewBox 1000×760)…" spellcheck="false"></textarea>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Storm <span class="note">scheduler</span></summary>
+      <div class="body">
+        <div class="presets" id="presets"></div>
+        <div class="grid" id="gStorm"></div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Bolt <span class="note">strike envelope</span></summary>
+      <div class="body"><div class="grid" id="gBolt"></div></div>
+    </details>
+
+    <details open>
+      <summary>Cloud <span class="note">sympathy &amp; ambient</span></summary>
+      <div class="body"><div class="grid" id="gCloud"></div></div>
+    </details>
+
+    <details>
+      <summary>Optics <span class="note">preview only</span></summary>
+      <div class="body">
+        <p class="blurb">Master brightness and tint are exported. Dot size and bloom shape only this preview — they model diffusion through the batting, not anything the controller does.</p>
+        <div class="grid" id="gLook"></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>Export <span class="note">Arduino / FastLED</span></summary>
+      <div class="body">
+        <p class="blurb">The sketch below is a direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same envelope. 300 px needs an ESP32, Teensy or RP2040; an AVR Nano runs out of RAM.</p>
+        <div class="tabs">
+          <button class="btn on" data-tab="ino">StormCloud.ino</button>
+          <button class="btn" data-tab="json">layout.json</button>
+        </div>
+        <pre class="code" id="codeOut"></pre>
+        <div class="exp-acts">
+          <button class="btn tiny" id="copyCode">Copy</button>
+          <button class="btn tiny" id="importJson">Import layout JSON</button>
+          <span class="said" id="copySaid"></span>
+        </div>
+      </div>
+    </details>
+  </aside>
+</div>
+
+<svg id="measure" width="0" height="0" style="position:absolute;visibility:hidden" aria-hidden="true"><path id="mpath" fill="none"></path></svg>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════════
+   Bolt Bench — lightning-cloud LED bench for a 300px addressable strip
+   All per-LED colour math is uint8 and mirrors FastLED's lib8tion so
+   the exported sketch is a transcription, not a re-implementation.
+   ════════════════════════════════════════════════════════════════ */
+
+const VB = { w: 1000, h: 760 };
+const NUM_LEDS = 300;
+const TAU = Math.PI * 2;
+
+/* ── lib8tion (bit-identical to FastLED) ─────────────────────────── */
+const B_M16 = [0, 49, 49, 41, 90, 27, 117, 10];
+function sin8(theta){
+  theta &= 0xFF;
+  let offset = theta;
+  if (theta & 0x40) offset = 255 - offset;
+  offset &= 0x3F;
+  let sec = offset & 0x0F;
+  if (theta & 0x40) sec++;
+  const s2 = (offset >> 4) * 2;
+  const b = B_M16[s2], m16 = B_M16[s2 + 1];
+  let y = ((m16 * sec) >> 4) + b;
+  if (theta & 0x80) y = -y;
+  return (y + 128) & 0xFF;
+}
+const cos8 = t => sin8((t + 64) & 0xFF);
+const scale8 = (i, s) => ((i * s) >> 8) & 0xFF;
+const qadd8  = (a, b) => Math.min(255, a + b);
+const qsub8  = (a, b) => Math.max(0, a - b);
+const mix8   = (a, b, amt) => (a + (((b - a) * amt) >> 8)) & 0xFF;
+
+let rand16seed = 0x1337;
+function random16(){ rand16seed = (Math.imul(rand16seed, 2053) + 13849) & 0xFFFF; return rand16seed; }
+function random8(){ random16(); return ((rand16seed & 0xFF) + (rand16seed >> 8)) & 0xFF; }
+function rndR(min, max){ if (max <= min) return min; return min + (((random16() * (max - min)) >> 16) & 0xFFFF); }
+/* frame-stable per-LED noise — no state, so scrubbing is repeatable */
+function hash8(a, b){
+  let h = (a * 73856093) ^ (b * 19349663);
+  h = (h ^ (h >>> 13)) >>> 0;
+  return (Math.imul(h, 2654435761) >>> 24) & 0xFF;
+}
+
+/* ── octagonal distance: cheap, integer, same on both sides ──────── */
+function dist8(dx, dy){
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  const hi = Math.max(ax, ay), lo = Math.min(ax, ay);
+  return Math.min(255, hi + ((lo * 85) >> 8));
+}
+
+/* ── parameters ──────────────────────────────────────────────────── */
+const SPEC = [
+  ['gStorm','gapMin',   'Gap min',        200, 9000, 50, 'ms'],
+  ['gStorm','gapMax',   'Gap max',        200, 9000, 50, 'ms'],
+  ['gStorm','dblChance','Double strike',    0,  255,  1, ''],
+  ['gStorm','clusterMs','Cluster spacing', 30,  600, 10, 'ms'],
+
+  ['gBolt','leadMin', 'Leader fast',    6,  240, 2, 'ms'],
+  ['gBolt','leadMax', 'Leader slow',    6,  240, 2, 'ms'],
+  ['gBolt','trail',   'Leader trail',   1,   40, 1, ''],
+  ['gBolt','taper',   'Tip taper',      0,  255, 1, ''],
+  ['gBolt','strkMin', 'Strokes min',    1,    6, 1, ''],
+  ['gBolt','strkMax', 'Strokes max',    1,    6, 1, ''],
+  ['gBolt','durMin',  'Stroke short',   4,  160, 2, 'ms'],
+  ['gBolt','durMax',  'Stroke long',    4,  160, 2, 'ms'],
+  ['gBolt','rgapMin', 'Restrike near', 10,  400, 5, 'ms'],
+  ['gBolt','rgapMax', 'Restrike far',  10,  400, 5, 'ms'],
+  ['gBolt','partial', 'Partial restrike', 0, 255, 1, ''],
+  ['gBolt','glowMs',  'Afterglow',     40, 1200,10, 'ms'],
+
+  ['gCloud','ambLevel',   'Ambient level',   0,  140, 1, ''],
+  ['gCloud','ambSpeed',   'Ambient drift',   1,   80, 1, ''],
+  ['gCloud','cloudFlash', 'Sympathy flash',  0,  255, 1, ''],
+  ['gCloud','cloudSpread','Spatial falloff', 0,  255, 1, ''],
+  ['gCloud','cloudMs',    'Cloud decay',   80, 2000,20, 'ms'],
+  ['gCloud','rumble',     'Rumble depth',    0,  180, 1, ''],
+
+  ['gLook','master','Master brightness', 8, 255, 1, ''],
+  ['gLook','tint',  'Cool tint',         0, 255, 1, ''],
+  ['gLook','dotSize','Dot size',         4,  46, 1, 'px'],
+  ['gLook','bloom', 'Bloom',             0, 200, 1, '%'],
+];
+
+const P = {
+  gapMin:900, gapMax:4200, dblChance:70, clusterMs:180,
+  leadMin:22, leadMax:88, trail:7, taper:70,
+  strkMin:1, strkMax:4, durMin:12, durMax:46,
+  rgapMin:30, rgapMax:140, partial:110, glowMs:330,
+  ambLevel:34, ambSpeed:14, cloudFlash:205, cloudSpread:150, cloudMs:540, rumble:70,
+  master:210, tint:150, dotSize:12, bloom:80,
+};
+
+const PRESETS = {
+  'Distant storm': { gapMin:2600, gapMax:8000, leadMin:60, leadMax:200, trail:14, strkMin:1, strkMax:2,
+                     durMin:20, durMax:60, glowMs:520, cloudFlash:150, cloudSpread:190, cloudMs:900,
+                     ambLevel:22, master:150, tint:200, partial:60, rumble:110 },
+  'Rolling':       { gapMin:900, gapMax:4200, leadMin:22, leadMax:88, trail:7, strkMin:1, strkMax:4,
+                     durMin:12, durMax:46, glowMs:330, cloudFlash:205, cloudSpread:150, cloudMs:540,
+                     ambLevel:34, master:210, tint:150, partial:110, rumble:70 },
+  'Direct hit':    { gapMin:280, gapMax:1500, leadMin:8, leadMax:26, trail:4, strkMin:2, strkMax:6,
+                     durMin:8, durMax:30, rgapMin:16, rgapMax:70, glowMs:200, cloudFlash:255,
+                     cloudSpread:60, cloudMs:300, ambLevel:44, master:255, tint:60, partial:190, rumble:30 },
+  'Heat lightning':{ gapMin:1400, gapMax:5200, leadMin:120, leadMax:240, trail:34, strkMin:1, strkMax:1,
+                     durMin:60, durMax:150, glowMs:700, cloudFlash:255, cloudSpread:230, cloudMs:1300,
+                     ambLevel:52, master:170, tint:225, partial:0, rumble:150 },
+};
+
+/* ── layout ──────────────────────────────────────────────────────── */
+const CLOUD_SIL = "M 178 336 C 96 336 58 278 92 228 C 46 174 96 108 172 120 C 198 54 302 36 356 90 "
+  + "C 406 24 532 28 570 104 C 654 58 754 94 758 168 C 852 172 894 248 840 302 "
+  + "C 826 332 782 346 736 336 C 700 350 640 348 604 334 C 520 350 430 348 356 332 "
+  + "C 292 348 226 348 178 336 Z";
+
+function defaultRuns(){
+  return [
+    { id:'r0', name:'Cloud body', role:'cloud', count:150, smooth:true, d:null, pts:[
+      [140,272],[200,214],[282,178],[372,166],[462,148],[552,140],[642,150],[722,176],[792,214],
+      [806,252],[730,264],[640,248],[544,238],[450,246],[354,236],[264,252],[184,264],
+      [166,298],[250,310],[350,300],[456,308],[560,298],[660,302],[746,290],[802,272],
+    ]},
+    { id:'r1', name:'Bolt · left', role:'bolt', count:50, smooth:false, d:null, pts:[
+      [276,316],[248,374],[292,380],[250,450],[296,456],[238,544],[272,540],[220,634],
+    ]},
+    { id:'r2', name:'Bolt · centre', role:'bolt', count:50, smooth:false, d:null, pts:[
+      [506,332],[478,394],[528,400],[472,474],[524,480],[462,570],[500,566],[450,668],
+    ]},
+    { id:'r3', name:'Bolt · right', role:'bolt', count:50, smooth:false, d:null, pts:[
+      [712,320],[750,380],[704,388],[762,456],[712,462],[778,552],[734,548],[792,638],
+    ]},
+  ];
+}
+
+let runs = defaultRuns();
+let selRun = 0;
+let uid = 100;
+
+/* derived per-LED tables, rebuilt only when routing changes */
+let ledX = new Float32Array(NUM_LEDS);   // viewBox coords, for drawing
+let ledY = new Float32Array(NUM_LEDS);
+let nrmX = new Uint8Array(NUM_LEDS);     // 0..255, exported to the sketch
+let nrmY = new Uint8Array(NUM_LEDS);
+let ledRun = new Int16Array(NUM_LEDS);
+let usedLeds = 0;
+
+const mpath = document.getElementById('mpath');
+
+function ptsToD(pts, smooth){
+  if (!pts || pts.length < 2) return '';
+  const f = n => Math.round(n * 10) / 10;
+  let d = `M ${f(pts[0][0])} ${f(pts[0][1])}`;
+  if (!smooth){
+    for (let i = 1; i < pts.length; i++) d += ` L ${f(pts[i][0])} ${f(pts[i][1])}`;
+    return d;
+  }
+  for (let i = 0; i < pts.length - 1; i++){
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C ${f(c1[0])} ${f(c1[1])}, ${f(c2[0])} ${f(c2[1])}, ${f(p2[0])} ${f(p2[1])}`;
+  }
+  return d;
+}
+const runD = r => r.d || ptsToD(r.pts, r.smooth);
+
+function rebuildLayout(){
+  let idx = 0;
+  ledRun.fill(-1);
+  for (let s = 0; s < runs.length; s++){
+    const r = runs[s];
+    r.start = idx;
+    const d = runD(r);
+    const n = Math.min(r.count, NUM_LEDS - idx);
+    r.drawn = n;
+    if (!d || n <= 0){ r.originX = 0; r.originY = 0; idx += n; continue; }
+    mpath.setAttribute('d', d);
+    let L = 0;
+    try { L = mpath.getTotalLength(); } catch(e){ L = 0; }
+    for (let i = 0; i < n; i++){
+      const t = n === 1 ? 0 : i / (n - 1);
+      let px = 0, py = 0;
+      try { const p = mpath.getPointAtLength(t * L); px = p.x; py = p.y; } catch(e){}
+      ledX[idx] = px; ledY[idx] = py; ledRun[idx] = s;
+      idx++;
+    }
+    r.originX = ledX[r.start]; r.originY = ledY[r.start];
+  }
+  usedLeds = idx;
+  for (let i = idx; i < NUM_LEDS; i++){ ledX[i] = -999; ledY[i] = -999; ledRun[i] = -1; }
+
+  // normalise to 0..255 on the longer axis so distances stay isotropic
+  const span = Math.max(VB.w, VB.h);
+  for (let i = 0; i < NUM_LEDS; i++){
+    nrmX[i] = Math.max(0, Math.min(255, Math.round(ledX[i] * 255 / span)));
+    nrmY[i] = Math.max(0, Math.min(255, Math.round(ledY[i] * 255 / span)));
+  }
+  for (const r of runs){
+    r.nOX = Math.round(Math.max(0, r.originX) * 255 / span);
+    r.nOY = Math.round(Math.max(0, r.originY) * 255 / span);
+  }
+  updateBudget();
+  buildExport();
+}
+
+/* ── strike model ────────────────────────────────────────────────── */
+const leds = new Uint8Array(NUM_LEDS * 3);
+let strikes = [];
+let simTime = 0;
+let nextStrikeAt = 700;
+let storming = true;
+
+function boltRuns(){ return runs.map((r, i) => [r, i]).filter(([r]) => r.role === 'bolt' && r.drawn > 1); }
+
+function makeStrike(segIdx, t0){
+  const seg = runs[segIdx];
+  const s = { seg: segIdx, t0, strokes: [] };
+  s.leaderMs = rndR(Math.min(P.leadMin, P.leadMax), Math.max(P.leadMin, P.leadMax) + 1);
+  const nMin = Math.min(P.strkMin, P.strkMax), nMax = Math.max(P.strkMin, P.strkMax);
+  const n = rndR(nMin, nMax + 1);
+  let t = s.leaderMs;
+  for (let k = 0; k < n; k++){
+    const dur = rndR(Math.min(P.durMin, P.durMax), Math.max(P.durMin, P.durMax) + 1);
+    const partial = k > 0 && random8() < P.partial;
+    s.strokes.push({
+      at: t, dur,
+      b: k === 0 ? 255 : rndR(110, 256),
+      upTo: partial ? rndR(90, 210) : 255,       // 0..255 fraction of the channel
+    });
+    t += dur + rndR(Math.min(P.rgapMin, P.rgapMax), Math.max(P.rgapMin, P.rgapMax) + 1);
+  }
+  const last = s.strokes[n - 1];
+  s.lastEnd = last.at + last.dur;
+  s.glowMs = Math.max(40, P.glowMs + rndR(0, 200) - 80);
+  s.cloudMs = Math.max(60, P.cloudMs);
+  s.total = s.lastEnd + Math.max(s.glowMs, s.cloudMs);
+  s.ox = seg.nOX; s.oy = seg.nOY;
+  s.rumbleSeed = random8();
+  return s;
+}
+
+function triggerStrike(segIdx){
+  if (segIdx == null){
+    const b = boltRuns();
+    if (!b.length) return;
+    segIdx = b[rndR(0, b.length)][1];
+  }
+  if (runs[segIdx] && runs[segIdx].drawn > 1) strikes.push(makeStrike(segIdx, simTime));
+}
+
+/* channel envelope: 0..255 intensity plus 0..255 "heat" (white ↔ blue) */
+function strikeEnvelope(s, e){
+  let env = 0, heat = 0, upTo = 255;
+  for (const st of s.strokes){
+    if (e >= st.at && e < st.at + st.dur){
+      const p = ((e - st.at) * 255 / st.dur) | 0;
+      const v = scale8(st.b, qsub8(255, scale8(p, 150)));
+      if (v > env){ env = v; heat = 255; upTo = st.upTo; }
+    }
+  }
+  if (e > s.lastEnd){
+    const p = Math.min(255, ((e - s.lastEnd) * 255 / s.glowMs) | 0);
+    const fall = scale8(scale8(qsub8(255, p), qsub8(255, p)), 150);
+    if (fall > env){ env = fall; heat = qsub8(255, p); upTo = 255; }
+  }
+  return { env, heat, upTo };
+}
+
+function renderStrike(s, now, frame){
+  const e = now - s.t0;
+  if (e < 0 || e > s.total) return;
+  const seg = runs[s.seg];
+  const start = seg.start, len = seg.drawn;
+  if (len < 1) return;
+
+  const { env, heat, upTo } = strikeEnvelope(s, e);
+
+  // --- the channel itself
+  if (e < s.leaderMs){
+    const head = ((e * len * 256 / s.leaderMs) | 0) >> 8;
+    for (let i = 0; i <= head && i < len; i++){
+      const b = qsub8(240, (head - i) * P.trail);
+      if (b) addLed(start + i, b, 200, i, len, frame);
+    }
+  }
+  if (env > 0){
+    const lim = Math.min(len, ((len * upTo) >> 8) + 1);
+    for (let i = 0; i < lim; i++){
+      const flick = qsub8(255, hash8(start + i, frame >> 1) >> 3);   // ±12%
+      addLed(start + i, scale8(env, flick), heat, i, len, frame);
+    }
+  }
+
+  // --- the cloud picking it up, by 2-D distance from the bolt's root
+  const glowP = e > s.lastEnd ? Math.min(255, ((e - s.lastEnd) * 255 / s.cloudMs) | 0) : 0;
+  let cenv = env;
+  if (glowP > 0){
+    const fall = scale8(qsub8(255, glowP), qsub8(255, glowP));
+    cenv = Math.max(env, fall);
+  }
+  cenv = scale8(cenv, P.cloudFlash);
+  if (cenv > 1){
+    const rum = P.rumble ? scale8(P.rumble, sin8(((now * 3) >> 4) + s.rumbleSeed)) : 0;
+    const cheat = qsub8(heat, scale8(glowP, 200));
+    for (let j = 0; j < usedLeds; j++){
+      const rr = ledRun[j];
+      if (rr < 0 || runs[rr].role !== 'cloud') continue;
+      const d = dist8(nrmX[j] - s.ox, nrmY[j] - s.oy);
+      const atten = qsub8(255, scale8(d, P.cloudSpread));
+      if (!atten) continue;
+      let v = scale8(cenv, atten);
+      if (rum) v = qsub8(v, scale8(v, scale8(rum, hash8(j, s.rumbleSeed))));
+      if (v) addLed(j, v, cheat, 0, 1, frame);
+    }
+  }
+}
+
+function addLed(i, bright, heat, pos, len, frame){
+  if (i < 0 || i >= NUM_LEDS || bright <= 0) return;
+  if (len > 1 && P.taper){                       // bolts thin out toward the tip
+    const t = ((pos * 255 / len) | 0) & 0xFF;
+    bright = qsub8(bright, scale8(bright, scale8(t, P.taper)));
+    if (!bright) return;
+  }
+  // cool tint: heat 255 = white hot, heat 0 = the blue afterglow
+  const cr = 255 - scale8(215, P.tint);
+  const cg = 255 - scale8(145, P.tint);
+  const r = scale8(mix8(cr, 255, heat), bright);
+  const g = scale8(mix8(cg, 255, heat), bright);
+  const b = scale8(255, bright);
+  const k = i * 3;
+  leds[k]   = qadd8(leds[k], r);
+  leds[k+1] = qadd8(leds[k+1], g);
+  leds[k+2] = qadd8(leds[k+2], b);
+}
+
+function renderAmbient(now){
+  if (!P.ambLevel) return;
+  const t1 = (now * P.ambSpeed / 64) | 0;
+  const t2 = (now * P.ambSpeed / 160) | 0;
+  for (let j = 0; j < usedLeds; j++){
+    const rr = ledRun[j];
+    if (rr < 0 || runs[rr].role !== 'cloud') continue;
+    const a = sin8((t1 + j * 5) & 0xFF);
+    const b = sin8((t2 - j * 11 + 64) & 0xFF);
+    const v = scale8(scale8(a, b), P.ambLevel);
+    if (v) addLed(j, v, 40, 0, 1, 0);
+  }
+}
+
+let frameNo = 0;
+function updateSim(now){
+  leds.fill(0);
+  frameNo++;
+  renderAmbient(now);
+
+  if (storming && now >= nextStrikeAt){
+    const b = boltRuns();
+    if (b.length){
+      const pick = rndR(0, b.length);
+      strikes.push(makeStrike(b[pick][1], now));
+      if (random8() < P.dblChance && b.length > 1){
+        let other = rndR(0, b.length);
+        if (other === pick) other = (other + 1) % b.length;
+        strikes.push(makeStrike(b[other][1], now + rndR(40, P.clusterMs + 1)));
+      }
+    }
+    nextStrikeAt = now + rndR(Math.min(P.gapMin, P.gapMax), Math.max(P.gapMin, P.gapMax) + 1);
+  }
+
+  for (const s of strikes) renderStrike(s, now, frameNo);
+  strikes = strikes.filter(s => now - s.t0 <= s.total + 40);
+
+  if (P.master < 255){
+    for (let i = 0; i < leds.length; i++) leds[i] = scale8(leds[i], P.master);
+  }
+}
+
+/* ══ rendering ═══════════════════════════════════════════════════ */
+const stageWrap = document.getElementById('stageWrap');
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+const bloomA = document.createElement('canvas'), bctxA = bloomA.getContext('2d');
+const bloomB = document.createElement('canvas'), bctxB = bloomB.getContext('2d');
+let view = { s:1, ox:0, oy:0, w:0, h:0, dpr:1 };
+let silPath = new Path2D(CLOUD_SIL);
+
+function sizeStage(){
+  const rect = stageWrap.getBoundingClientRect();
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  view.w = Math.max(320, rect.width); view.h = Math.max(240, rect.height); view.dpr = dpr;
+  cv.width = view.w * dpr; cv.height = view.h * dpr;
+  const pad = 24;
+  view.s = Math.min((view.w - pad * 2) / VB.w, (view.h - pad * 2) / VB.h);
+  view.ox = (view.w - VB.w * view.s) / 2;
+  view.oy = (view.h - VB.h * view.s) / 2;
+  bloomA.width = Math.max(1, (view.w / 4) | 0); bloomA.height = Math.max(1, (view.h / 4) | 0);
+  bloomB.width = Math.max(1, (view.w / 11) | 0); bloomB.height = Math.max(1, (view.h / 11) | 0);
+}
+const toScreen = (x, y) => [view.ox + x * view.s, view.oy + y * view.s];
+const toVB = (sx, sy) => [(sx - view.ox) / view.s, (sy - view.oy) / view.s];
+
+function paintDots(c, k, radius, alpha){
+  c.save();
+  c.scale(k, k);
+  c.globalCompositeOperation = 'lighter';
+  c.globalAlpha = alpha;
+  for (let i = 0; i < usedLeds; i++){
+    const r = leds[i*3], g = leds[i*3+1], b = leds[i*3+2];
+    if (r + g + b < 8) continue;
+    const [x, y] = toScreen(ledX[i], ledY[i]);
+    const grd = c.createRadialGradient(x, y, 0, x, y, radius);
+    grd.addColorStop(0, `rgba(${r},${g},${b},1)`);
+    grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    c.fillStyle = grd;
+    c.beginPath(); c.arc(x, y, radius, 0, TAU); c.fill();
+  }
+  c.restore();
+}
+
+let mode = 'preview';
+let hoverRun = -1, dragPt = null;
+
+function drawStage(){
+  const d = view.dpr;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#0b0f17';
+  ctx.fillRect(0, 0, view.w, view.h);
+
+  // cloud silhouette — the batting the rope is stuffed into
+  ctx.save();
+  ctx.translate(view.ox, view.oy); ctx.scale(view.s, view.s);
+  ctx.fillStyle = 'rgba(24,32,46,.62)';
+  ctx.fill(silPath);
+  ctx.strokeStyle = 'rgba(56,70,92,.7)'; ctx.lineWidth = 1.6 / view.s;
+  ctx.stroke(silPath);
+  ctx.restore();
+
+  // rope paths, faint
+  ctx.save();
+  ctx.translate(view.ox, view.oy); ctx.scale(view.s, view.s);
+  ctx.lineWidth = 1.2 / view.s; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  runs.forEach((r, i) => {
+    const dd = runD(r); if (!dd) return;
+    ctx.strokeStyle = (i === selRun && mode === 'edit') ? 'rgba(130,200,255,.55)' : 'rgba(70,86,110,.42)';
+    ctx.stroke(new Path2D(dd));
+  });
+  ctx.restore();
+
+  // unlit LEDs so the routing reads even in the dark
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(88,104,128,.5)';
+  for (let i = 0; i < usedLeds; i++){
+    const [x, y] = toScreen(ledX[i], ledY[i]);
+    ctx.fillRect(x - .9, y - .9, 1.8, 1.8);
+  }
+
+  const R = P.dotSize;
+  paintDots(ctx, 1, R * 0.38, 0.95);
+  const bl = P.bloom / 100;
+  if (bl > 0.01){
+    bctxA.setTransform(1,0,0,1,0,0); bctxA.clearRect(0,0,bloomA.width,bloomA.height);
+    bctxB.setTransform(1,0,0,1,0,0); bctxB.clearRect(0,0,bloomB.width,bloomB.height);
+    paintDots(bctxA, 1/4, R * 0.75, 0.42);
+    paintDots(bctxB, 1/11, R * 1.35, 0.5);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.62 * bl; ctx.drawImage(bloomA, 0, 0, view.w, view.h);
+    ctx.globalAlpha = 0.50 * bl; ctx.drawImage(bloomB, 0, 0, view.w, view.h);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  if (mode === 'edit') drawHandles();
+}
+
+function drawHandles(){
+  const r = runs[selRun];
+  if (!r || r.d) return;
+  ctx.globalCompositeOperation = 'source-over';
+  r.pts.forEach((p, i) => {
+    const [x, y] = toScreen(p[0], p[1]);
+    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, TAU);
+    ctx.fillStyle = (dragPt === i) ? '#82c8ff' : '#0b0f17';
+    ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#82c8ff'; ctx.stroke();
+    if (i === 0){
+      ctx.fillStyle = '#82c8ff';
+      ctx.font = '600 10px "IBM Plex Mono",monospace';
+      ctx.fillText('0', x + 9, y - 7);
+    }
+  });
+}
+
+/* ── strip readout ───────────────────────────────────────────────── */
+const stripCv = document.getElementById('strip');
+const sctx = stripCv.getContext('2d');
+const stripImg = sctx.createImageData(NUM_LEDS, 1);
+let stripW = 900;
+
+function sizeStrip(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  stripW = stripCv.clientWidth || 900;
+  stripCv.width = stripW * dpr; stripCv.height = 76 * dpr;
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+const tmpStrip = document.createElement('canvas');
+tmpStrip.width = NUM_LEDS; tmpStrip.height = 1;
+const tctx = tmpStrip.getContext('2d');
+
+function drawStrip(){
+  const d = stripImg.data;
+  for (let i = 0; i < NUM_LEDS; i++){
+    const on = i < usedLeds;
+    d[i*4]   = on ? leds[i*3]   : 16;
+    d[i*4+1] = on ? leds[i*3+1] : 20;
+    d[i*4+2] = on ? leds[i*3+2] : 28;
+    d[i*4+3] = 255;
+  }
+  tctx.putImageData(stripImg, 0, 0);
+  sctx.clearRect(0, 0, stripW, 76);
+  sctx.imageSmoothingEnabled = false;
+  sctx.drawImage(tmpStrip, 0, 0, NUM_LEDS, 1, 0, 0, stripW, 26);
+  sctx.imageSmoothingEnabled = true;
+  sctx.strokeStyle = '#28313f'; sctx.lineWidth = 1;
+  sctx.strokeRect(0.5, 0.5, stripW - 1, 25);
+
+  // index ruler
+  const px = stripW / NUM_LEDS;
+  sctx.font = '400 9px "IBM Plex Mono",monospace';
+  sctx.textBaseline = 'top';
+  for (let i = 0; i <= NUM_LEDS; i += 25){
+    const x = Math.min(stripW - 0.5, i * px) + 0.5;
+    sctx.strokeStyle = i % 100 === 0 ? '#42506a' : '#28313f';
+    sctx.beginPath(); sctx.moveTo(x, 27); sctx.lineTo(x, i % 100 === 0 ? 34 : 31); sctx.stroke();
+    if (i % 50 === 0 && i < NUM_LEDS){
+      sctx.fillStyle = '#5c6879';
+      sctx.fillText(String(i), x + 3, 27);
+    }
+  }
+  // segment brackets
+  runs.forEach((r, i) => {
+    if (!r.drawn) return;
+    const x0 = r.start * px, x1 = (r.start + r.drawn) * px;
+    const sel = i === selRun;
+    sctx.fillStyle = sel ? '#82c8ff' : '#5c6879';
+    sctx.fillRect(x0 + 1, 41, Math.max(2, x1 - x0 - 2), 2);
+    sctx.fillStyle = sel ? '#e2e8f4' : '#8794a9';
+    sctx.font = '500 10px "IBM Plex Mono",monospace';
+    const lbl = `${r.name}  ${r.start}–${r.start + r.drawn - 1}`;
+    const wide = sctx.measureText(lbl).width < (x1 - x0 - 6);
+    sctx.fillText(wide ? lbl : `${r.start}–${r.start + r.drawn - 1}`, x0 + 2, 47);
+  });
+  if (usedLeds < NUM_LEDS){
+    sctx.fillStyle = '#3c4657';
+    sctx.font = '400 10px "IBM Plex Mono",monospace';
+    sctx.fillText(`${NUM_LEDS - usedLeds} unassigned`, usedLeds * px + 3, 47);
+  }
+}
+
+/* ── envelope scope ──────────────────────────────────────────────── */
+const scopeCv = document.getElementById('scope');
+const pctx = scopeCv.getContext('2d');
+let scopeW = 900;
+const SCOPE_N = 640;
+const traceCloud = new Uint8Array(SCOPE_N);
+const traceBolt  = new Uint8Array(SCOPE_N);
+let traceHead = 0;
+
+function sizeScope(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  scopeW = scopeCv.clientWidth || 900;
+  scopeCv.width = scopeW * dpr; scopeCv.height = 74 * dpr;
+  pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function sampleTrace(){
+  let cSum = 0, cN = 0, bMax = 0;
+  for (let j = 0; j < usedLeds; j++){
+    const rr = ledRun[j]; if (rr < 0) continue;
+    const v = Math.max(leds[j*3], leds[j*3+1], leds[j*3+2]);
+    if (runs[rr].role === 'cloud'){ cSum += v; cN++; }
+    else if (v > bMax) bMax = v;
+  }
+  traceCloud[traceHead] = cN ? Math.min(255, (cSum / cN) * 3) : 0;
+  traceBolt[traceHead] = bMax;
+  traceHead = (traceHead + 1) % SCOPE_N;
+}
+function drawScope(){
+  const H = 74, top = 12, h = H - top - 12;
+  pctx.clearRect(0, 0, scopeW, H);
+  pctx.strokeStyle = '#1c2431'; pctx.lineWidth = 1;
+  for (let g = 0; g <= 4; g++){
+    const y = top + h * g / 4 + .5;
+    pctx.beginPath(); pctx.moveTo(0, y); pctx.lineTo(scopeW, y); pctx.stroke();
+  }
+  const step = scopeW / SCOPE_N;
+  const at = k => (traceHead + k) % SCOPE_N;
+
+  pctx.beginPath(); pctx.moveTo(0, top + h);
+  for (let k = 0; k < SCOPE_N; k++) pctx.lineTo(k * step, top + h - traceCloud[at(k)] / 255 * h);
+  pctx.lineTo(scopeW, top + h); pctx.closePath();
+  pctx.fillStyle = 'rgba(58,127,184,.30)'; pctx.fill();
+  pctx.strokeStyle = 'rgba(90,160,220,.75)'; pctx.lineWidth = 1; pctx.stroke();
+
+  pctx.beginPath();
+  for (let k = 0; k < SCOPE_N; k++){
+    const y = top + h - traceBolt[at(k)] / 255 * h;
+    k ? pctx.lineTo(k * step, y) : pctx.moveTo(k * step, y);
+  }
+  pctx.strokeStyle = '#dce8f8'; pctx.lineWidth = 1.2; pctx.stroke();
+
+  pctx.font = '400 9px "IBM Plex Mono",monospace';
+  pctx.fillStyle = '#5c6879'; pctx.textBaseline = 'top';
+  pctx.fillText('CHANNEL PEAK', 2, 1);
+  pctx.fillStyle = '#4d7ea8';
+  pctx.fillText('CLOUD MEAN ×3', 92, 1);
+  pctx.fillStyle = '#3c4657'; pctx.textAlign = 'right';
+  pctx.fillText('255', scopeW - 2, 1);
+  pctx.fillText('◄ ~10 s window', scopeW - 2, H - 11);
+  pctx.textAlign = 'left';
+}
+
+/* ══ UI wiring ═══════════════════════════════════════════════════ */
+function el(tag, cls, txt){ const n = document.createElement(tag); if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; }
+
+function buildParams(){
+  const groups = {};
+  for (const [g, key, label, min, max, step, unit] of SPEC){
+    if (!groups[g]) groups[g] = document.getElementById(g);
+    const wrap = el('div', 'p');
+    const lab = el('div', 'lab');
+    lab.append(el('span', null, label));
+    const out = el('output'); out.id = 'o_' + key; lab.append(out);
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = P[key];
+    inp.id = 'i_' + key;
+    inp.setAttribute('aria-label', label);
+    const show = () => { out.textContent = P[key] + (unit ? (unit === 'ms' ? ' ms' : unit === 'px' ? ' px' : unit) : ''); };
+    inp.addEventListener('input', () => { P[key] = +inp.value; show(); onParamChange(); });
+    show();
+    wrap.append(lab, inp);
+    groups[g].append(wrap);
+  }
+  const pr = document.getElementById('presets');
+  for (const name of Object.keys(PRESETS)){
+    const b = el('button', 'btn', name);
+    b.addEventListener('click', () => applyPreset(name));
+    pr.append(b);
+  }
+}
+function syncParamUI(){
+  for (const [, key, , , , , unit] of SPEC){
+    const inp = document.getElementById('i_' + key);
+    const out = document.getElementById('o_' + key);
+    if (!inp) continue;
+    inp.value = P[key];
+    out.textContent = P[key] + (unit ? (unit === 'ms' ? ' ms' : unit === 'px' ? ' px' : unit) : '');
+  }
+}
+function applyPreset(name){
+  Object.assign(P, PRESETS[name]);
+  syncParamUI(); onParamChange();
+}
+function onParamChange(){ buildExport(); save(); }
+
+/* routing list */
+const runsEl = document.getElementById('runs');
+function renderRuns(){
+  runsEl.textContent = '';
+  runs.forEach((r, i) => {
+    const row = el('div', 'run' + (i === selRun ? ' sel' : ''));
+    row.addEventListener('mousedown', () => { selRun = i; renderRuns(); syncPaste(); });
+
+    const top = el('div', 'run-top');
+    const sw = el('span', 'swatch');
+    sw.style.color = r.role === 'bolt' ? '#e8f2ff' : '#5f9fd6';
+    const nm = document.createElement('input');
+    nm.className = 'run-name'; nm.value = r.name; nm.setAttribute('aria-label', 'Run name');
+    nm.addEventListener('input', () => { r.name = nm.value; buildExport(); save(); });
+    const acts = el('div', 'run-acts');
+    if (r.role === 'bolt'){
+      const f = el('button', 'iconbtn fire', '⚡'); f.title = 'Fire this bolt';
+      f.addEventListener('click', e => { e.stopPropagation(); triggerStrike(i); });
+      acts.append(f);
+    }
+    const up = el('button', 'iconbtn', '↑'); up.title = 'Earlier in wiring order';
+    up.addEventListener('click', e => { e.stopPropagation(); if (i > 0){ [runs[i-1], runs[i]] = [runs[i], runs[i-1]]; selRun = i-1; rebuildLayout(); renderRuns(); save(); } });
+    const dn = el('button', 'iconbtn', '↓'); dn.title = 'Later in wiring order';
+    dn.addEventListener('click', e => { e.stopPropagation(); if (i < runs.length-1){ [runs[i+1], runs[i]] = [runs[i], runs[i+1]]; selRun = i+1; rebuildLayout(); renderRuns(); save(); } });
+    const del = el('button', 'iconbtn del', '✕'); del.title = 'Remove run';
+    del.addEventListener('click', e => {
+      e.stopPropagation();
+      if (runs.length <= 1) return;
+      runs.splice(i, 1); selRun = Math.max(0, selRun - 1);
+      strikes = []; rebuildLayout(); renderRuns(); save();
+    });
+    acts.append(up, dn, del);
+    top.append(sw, nm, acts);
+
+    const meta = el('div', 'run-meta');
+    meta.append(el('span', 'idx', `${r.start}…${r.start + Math.max(0, r.drawn - 1)}`));
+    const cnt = document.createElement('input');
+    cnt.type = 'number'; cnt.min = 1; cnt.max = NUM_LEDS; cnt.value = r.count;
+    cnt.setAttribute('aria-label', 'LED count');
+    cnt.addEventListener('input', () => {
+      r.count = Math.max(1, Math.min(NUM_LEDS, +cnt.value || 1));
+      rebuildLayout(); renderRuns(); save();
+    });
+    meta.append(cnt, el('span', null, 'px'));
+    const sel = el('select', 'role');
+    ['cloud','bolt'].forEach(v => { const o = el('option', null, v); o.value = v; if (r.role === v) o.selected = true; sel.append(o); });
+    sel.setAttribute('aria-label', 'Run role');
+    sel.addEventListener('change', () => { r.role = sel.value; strikes = []; renderRuns(); buildExport(); save(); });
+    meta.append(sel);
+    if (r.d){
+      const c = el('button', 'iconbtn', 'custom d'); c.title = 'Drop the pasted path and edit handles again';
+      c.addEventListener('click', e => { e.stopPropagation(); r.d = null; rebuildLayout(); renderRuns(); syncPaste(); save(); });
+      meta.append(c);
+    }
+    row.append(top, meta);
+    runsEl.append(row);
+  });
+  document.getElementById('routeNote').textContent = `${runs.length} runs`;
+}
+
+const dPaste = document.getElementById('dPaste');
+function syncPaste(){ dPaste.value = runs[selRun] ? runD(runs[selRun]) : ''; }
+dPaste.addEventListener('change', () => {
+  const r = runs[selRun]; if (!r) return;
+  const v = dPaste.value.trim();
+  if (!v){ r.d = null; } else { r.d = v; }
+  rebuildLayout(); renderRuns(); save();
+});
+
+function updateBudget(){
+  const pct = Math.min(100, usedLeds / NUM_LEDS * 100);
+  document.getElementById('budgetNum').innerHTML = `${usedLeds}<em>/${NUM_LEDS}</em>`;
+  const fill = document.getElementById('budgetFill');
+  fill.style.width = pct + '%';
+  const want = runs.reduce((a, r) => a + r.count, 0);
+  fill.classList.toggle('over', want > NUM_LEDS);
+  document.getElementById('budgetNote').textContent =
+    want > NUM_LEDS ? `${want - NUM_LEDS} over budget` :
+    usedLeds < NUM_LEDS ? `${NUM_LEDS - usedLeds} spare` : 'strip allocated';
+  document.getElementById('stripInfo').textContent = `leds[0…${NUM_LEDS - 1}] · GRB · ${runs.length} segments`;
+}
+
+/* ── stage interaction ───────────────────────────────────────────── */
+function nearestHandle(vx, vy){
+  const r = runs[selRun]; if (!r || r.d) return -1;
+  const tol = 11 / view.s;
+  for (let i = 0; i < r.pts.length; i++){
+    if (Math.hypot(r.pts[i][0] - vx, r.pts[i][1] - vy) < tol) return i;
+  }
+  return -1;
+}
+function runAt(vx, vy){
+  let best = -1, bd = 26;
+  for (let i = 0; i < usedLeds; i++){
+    const d = Math.hypot(ledX[i] - vx, ledY[i] - vy);
+    if (d < bd){ bd = d; best = ledRun[i]; }
+  }
+  return best;
+}
+cv.addEventListener('pointerdown', e => {
+  const rect = cv.getBoundingClientRect();
+  const [vx, vy] = toVB(e.clientX - rect.left, e.clientY - rect.top);
+  if (mode === 'edit'){
+    const h = nearestHandle(vx, vy);
+    if (h >= 0){ dragPt = h; cv.setPointerCapture(e.pointerId); return; }
+    const r = runs[selRun];
+    if (r && !r.d){ r.pts.push([Math.round(vx), Math.round(vy)]); rebuildLayout(); syncPaste(); save(); }
+  } else {
+    const ri = runAt(vx, vy);
+    if (ri >= 0){
+      selRun = ri; renderRuns(); syncPaste();
+      if (runs[ri].role === 'bolt') triggerStrike(ri);
+    }
+  }
+});
+cv.addEventListener('pointermove', e => {
+  if (dragPt == null) return;
+  const rect = cv.getBoundingClientRect();
+  const [vx, vy] = toVB(e.clientX - rect.left, e.clientY - rect.top);
+  runs[selRun].pts[dragPt] = [Math.round(vx), Math.round(vy)];
+  rebuildLayout();
+});
+cv.addEventListener('pointerup', () => { if (dragPt != null){ dragPt = null; syncPaste(); save(); } });
+
+function setMode(m){
+  mode = m;
+  stageWrap.classList.toggle('editing', m === 'edit');
+  const chip = document.getElementById('modeChip');
+  chip.textContent = m === 'edit' ? 'Editing routing' : 'Preview';
+  chip.classList.toggle('act', m === 'edit');
+  document.getElementById('hint').innerHTML = m === 'edit'
+    ? 'Click to extend the selected run · drag handles to move · <kbd>Backspace</kbd> undo point · <kbd>E</kbd> done'
+    : 'Click a bolt to fire it · <kbd>Space</kbd> play/pause · <kbd>S</kbd> strike · <kbd>E</kbd> edit routing';
+}
+document.getElementById('modeChip').addEventListener('click', () => setMode(mode === 'edit' ? 'preview' : 'edit'));
+
+/* ── transport ───────────────────────────────────────────────────── */
+let playing = true, speed = 1;
+const playBtn = document.getElementById('play');
+playBtn.addEventListener('click', () => {
+  playing = !playing;
+  playBtn.textContent = playing ? 'Pause' : 'Play';
+  playBtn.classList.toggle('on', playing);
+});
+document.getElementById('step').addEventListener('click', () => { simTime += 16 * speed; updateSim(simTime); sampleTrace(); });
+document.getElementById('fire').addEventListener('click', () => triggerStrike(null));
+const stormBtn = document.getElementById('storm');
+stormBtn.classList.add('on');
+stormBtn.addEventListener('click', () => {
+  storming = !storming;
+  stormBtn.classList.toggle('on', storming);
+  if (storming) nextStrikeAt = simTime + 300;
+});
+const speedIn = document.getElementById('speed'), speedOut = document.getElementById('speedOut');
+speedIn.addEventListener('input', () => {
+  speed = +speedIn.value / 100;
+  speedOut.textContent = speed.toFixed(2) + '×';
+});
+addEventListener('keydown', e => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){
+    if (e.key === 'Backspace' && e.target === dPaste) return;
+    if (e.key !== 'Escape') return;
+  }
+  if (e.code === 'Space'){ e.preventDefault(); playBtn.click(); }
+  else if (e.key === 's' || e.key === 'S') triggerStrike(null);
+  else if (e.key === 'e' || e.key === 'E') setMode(mode === 'edit' ? 'preview' : 'edit');
+  else if (e.key === 'Backspace' && mode === 'edit'){
+    const r = runs[selRun];
+    if (r && !r.d && r.pts.length > 2){ e.preventDefault(); r.pts.pop(); rebuildLayout(); syncPaste(); save(); }
+  }
+});
+
+document.getElementById('addCloud').addEventListener('click', () => {
+  runs.push({ id: 'r' + (uid++), name: 'Cloud run ' + runs.length, role: 'cloud', count: 30, smooth: true, d: null,
+    pts: [[250, 200], [420, 190], [590, 205]] });
+  selRun = runs.length - 1; rebuildLayout(); renderRuns(); syncPaste(); setMode('edit'); save();
+});
+document.getElementById('addBolt').addEventListener('click', () => {
+  runs.push({ id: 'r' + (uid++), name: 'Bolt ' + (runs.filter(r => r.role === 'bolt').length + 1), role: 'bolt', count: 40, smooth: false, d: null,
+    pts: [[420, 330], [392, 400], [440, 408], [396, 490], [438, 498], [388, 590]] });
+  selRun = runs.length - 1; rebuildLayout(); renderRuns(); syncPaste(); setMode('edit'); save();
+});
+document.getElementById('resetLayout').addEventListener('click', () => {
+  runs = defaultRuns(); selRun = 0; strikes = [];
+  rebuildLayout(); renderRuns(); syncPaste(); save();
+});
+
+/* ══ export ══════════════════════════════════════════════════════ */
+let exportTab = 'ino';
+const codeOut = document.getElementById('codeOut');
+document.querySelectorAll('.tabs .btn').forEach(b => {
+  b.addEventListener('click', () => {
+    exportTab = b.dataset.tab;
+    document.querySelectorAll('.tabs .btn').forEach(x => x.classList.toggle('on', x === b));
+    buildExport();
+  });
+});
+
+function ident(name, i){
+  const s = name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return 'SEG_' + (s || 'RUN') + '_' + i;
+}
+function tableU8(arr, n, perLine){
+  const out = [];
+  for (let i = 0; i < n; i += perLine){
+    out.push('  ' + Array.from(arr.slice(i, Math.min(n, i + perLine))).join(', ') + (i + perLine < n ? ',' : ''));
+  }
+  return out.join('\n');
+}
+function layoutJSON(){
+  return JSON.stringify({
+    format: 'bolt-bench/1', numLeds: NUM_LEDS, viewBox: [VB.w, VB.h],
+    runs: runs.map(r => ({ name: r.name, role: r.role, count: r.count, smooth: r.smooth,
+                           start: r.start, d: r.d || undefined, pts: r.d ? undefined : r.pts })),
+    params: { ...P },
+  }, null, 2);
+}
+
+function buildExport(){
+  if (exportTab === 'json'){ codeOut.textContent = layoutJSON(); return; }
+  const segLines = runs.map((r, i) =>
+    `  { ${String(r.start).padStart(3)}, ${String(r.drawn || 0).padStart(3)}, ${r.role === 'bolt' ? 1 : 0}, ` +
+    `${String(r.nOX || 0).padStart(3)}, ${String(r.nOY || 0).padStart(3)} },  // ${r.name}`).join('\n');
+  const defs = runs.map((r, i) => `#define ${ident(r.name, i).padEnd(22)} ${i}`).join('\n');
+
+  codeOut.textContent = `/* ─────────────────────────────────────────────────────────────
+   StormCloud — generated by Bolt Bench
+   ${runs.length} runs · ${usedLeds}/${NUM_LEDS} pixels allocated
+
+   The colour math here is the same uint8 arithmetic the bench
+   previews, and random16() is FastLED's own LCG, so seeding the
+   same value reproduces the storm you tuned.
+
+   300 px of state needs headroom: ESP32 / Teensy / RP2040.
+   ───────────────────────────────────────────────────────────── */
+#include <FastLED.h>
+
+#define LED_PIN      6
+#define NUM_LEDS     ${NUM_LEDS}
+#define LED_TYPE     WS2812B
+#define COLOR_ORDER  GRB
+#define MAX_STRIKES  6
+#define MAX_STROKES  6
+
+CRGB leds[NUM_LEDS];
+
+/* ── routing ────────────────────────────────────────────────── */
+struct Segment {
+  uint16_t start;
+  uint16_t len;
+  uint8_t  isBolt;
+  uint8_t  ox, oy;      // channel root, normalised 0..255
+};
+
+${defs}
+#define NUM_SEGMENTS ${runs.length}
+
+const Segment SEGMENTS[NUM_SEGMENTS] PROGMEM = {
+${segLines}
+};
+
+// pixel positions, normalised 0..255 across the long axis
+const uint8_t LED_X[NUM_LEDS] PROGMEM = {
+${tableU8(nrmX, NUM_LEDS, 20)}
+};
+const uint8_t LED_Y[NUM_LEDS] PROGMEM = {
+${tableU8(nrmY, NUM_LEDS, 20)}
+};
+
+/* ── tuning ─────────────────────────────────────────────────── */
+#define GAP_MIN       ${P.gapMin}
+#define GAP_MAX       ${P.gapMax}
+#define DBL_CHANCE    ${P.dblChance}
+#define CLUSTER_MS    ${P.clusterMs}
+#define LEAD_MIN      ${Math.min(P.leadMin, P.leadMax)}
+#define LEAD_MAX      ${Math.max(P.leadMin, P.leadMax)}
+#define TRAIL         ${P.trail}
+#define TAPER         ${P.taper}
+#define STRK_MIN      ${Math.min(P.strkMin, P.strkMax)}
+#define STRK_MAX      ${Math.max(P.strkMin, P.strkMax)}
+#define DUR_MIN       ${Math.min(P.durMin, P.durMax)}
+#define DUR_MAX       ${Math.max(P.durMin, P.durMax)}
+#define RGAP_MIN      ${Math.min(P.rgapMin, P.rgapMax)}
+#define RGAP_MAX      ${Math.max(P.rgapMin, P.rgapMax)}
+#define PARTIAL       ${P.partial}
+#define GLOW_MS       ${P.glowMs}
+#define AMB_LEVEL     ${P.ambLevel}
+#define AMB_SPEED     ${P.ambSpeed}
+#define CLOUD_FLASH   ${P.cloudFlash}
+#define CLOUD_SPREAD  ${P.cloudSpread}
+#define CLOUD_MS      ${P.cloudMs}
+#define RUMBLE        ${P.rumble}
+#define MASTER        ${P.master}
+#define TINT          ${P.tint}
+
+/* ── helpers ────────────────────────────────────────────────── */
+static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t amt) {
+  return a + (uint8_t)(((int16_t)(b - a) * (int16_t)amt) >> 8);
+}
+static inline uint8_t dist8(int16_t dx, int16_t dy) {
+  uint16_t ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+  uint16_t hi = ax > ay ? ax : ay, lo = ax > ay ? ay : ax;
+  uint16_t d = hi + ((lo * 85) >> 8);
+  return d > 255 ? 255 : (uint8_t)d;
+}
+// stateless per-pixel noise: the same pixel flickers the same way each frame
+static inline uint8_t hash8(uint16_t a, uint16_t b) {
+  uint32_t h = ((uint32_t)a * 73856093UL) ^ ((uint32_t)b * 19349663UL);
+  h ^= h >> 13;
+  return (uint8_t)((h * 2654435761UL) >> 24);
+}
+static inline uint16_t rndR(uint16_t lo, uint16_t hi) {
+  return hi <= lo ? lo : lo + random16(hi - lo);
+}
+
+/* ── strike model ───────────────────────────────────────────── */
+struct Stroke { uint16_t at; uint16_t dur; uint8_t b; uint8_t upTo; };
+struct Strike {
+  bool     active;
+  uint8_t  seg;
+  uint32_t t0;
+  uint16_t leaderMs;
+  uint8_t  nStrokes;
+  Stroke   strokes[MAX_STROKES];
+  uint16_t lastEnd;
+  uint16_t glowMs;
+  uint16_t total;
+  uint8_t  ox, oy;
+  uint8_t  rumbleSeed;
+};
+Strike strikes[MAX_STRIKES];
+uint32_t nextStrikeAt = 700;
+uint16_t frameNo = 0;
+
+void makeStrike(uint8_t slot, uint8_t segIdx, uint32_t t0) {
+  Strike &s = strikes[slot];
+  Segment seg; memcpy_P(&seg, &SEGMENTS[segIdx], sizeof(Segment));
+  s.active = true; s.seg = segIdx; s.t0 = t0;
+  s.leaderMs = rndR(LEAD_MIN, LEAD_MAX + 1);
+  s.nStrokes = rndR(STRK_MIN, STRK_MAX + 1);
+  if (s.nStrokes > MAX_STROKES) s.nStrokes = MAX_STROKES;
+  uint16_t t = s.leaderMs;
+  for (uint8_t k = 0; k < s.nStrokes; k++) {
+    uint16_t dur = rndR(DUR_MIN, DUR_MAX + 1);
+    bool partial = (k > 0) && (random8() < PARTIAL);
+    s.strokes[k].at   = t;
+    s.strokes[k].dur  = dur;
+    s.strokes[k].b    = (k == 0) ? 255 : (uint8_t)rndR(110, 256);
+    s.strokes[k].upTo = partial ? (uint8_t)rndR(90, 210) : 255;
+    t += dur + rndR(RGAP_MIN, RGAP_MAX + 1);
+  }
+  s.lastEnd = s.strokes[s.nStrokes - 1].at + s.strokes[s.nStrokes - 1].dur;
+  uint16_t g = GLOW_MS + rndR(0, 200); g = (g > 80) ? g - 80 : 40;
+  s.glowMs = g;
+  s.total  = s.lastEnd + (s.glowMs > CLOUD_MS ? s.glowMs : CLOUD_MS);
+  s.ox = seg.ox; s.oy = seg.oy;
+  s.rumbleSeed = random8();
+}
+
+int8_t freeSlot() {
+  for (uint8_t i = 0; i < MAX_STRIKES; i++) if (!strikes[i].active) return i;
+  return -1;
+}
+void trigger(uint8_t segIdx, uint32_t at) {
+  int8_t slot = freeSlot();
+  if (slot >= 0) makeStrike(slot, segIdx, at);
+}
+
+/* ── per-pixel accumulate ───────────────────────────────────── */
+void addLed(uint16_t i, uint8_t bright, uint8_t heat, uint16_t pos, uint16_t len) {
+  if (i >= NUM_LEDS || bright == 0) return;
+  if (len > 1 && TAPER) {
+    uint8_t t = (uint8_t)((uint32_t)pos * 255 / len);
+    bright = qsub8(bright, scale8(bright, scale8(t, TAPER)));
+    if (!bright) return;
+  }
+  uint8_t cr = 255 - scale8(215, TINT);
+  uint8_t cg = 255 - scale8(145, TINT);
+  leds[i].r = qadd8(leds[i].r, scale8(mix8(cr, 255, heat), bright));
+  leds[i].g = qadd8(leds[i].g, scale8(mix8(cg, 255, heat), bright));
+  leds[i].b = qadd8(leds[i].b, bright);
+}
+
+/* ── channel envelope: intensity + heat (white ↔ blue) ──────── */
+void envelope(const Strike &s, uint16_t e, uint8_t &env, uint8_t &heat, uint8_t &upTo) {
+  env = 0; heat = 0; upTo = 255;
+  for (uint8_t k = 0; k < s.nStrokes; k++) {
+    const Stroke &st = s.strokes[k];
+    if (e >= st.at && e < (uint16_t)(st.at + st.dur)) {
+      uint8_t p = (uint8_t)((uint32_t)(e - st.at) * 255 / st.dur);
+      uint8_t v = scale8(st.b, qsub8(255, scale8(p, 150)));
+      if (v > env) { env = v; heat = 255; upTo = st.upTo; }
+    }
+  }
+  if (e > s.lastEnd) {
+    uint32_t q = (uint32_t)(e - s.lastEnd) * 255 / s.glowMs;
+    uint8_t p = q > 255 ? 255 : (uint8_t)q;
+    uint8_t inv = qsub8(255, p);
+    uint8_t fall = scale8(scale8(inv, inv), 150);
+    if (fall > env) { env = fall; heat = inv; upTo = 255; }
+  }
+}
+
+void renderStrike(Strike &s, uint32_t now) {
+  if (!s.active) return;
+  if (now < s.t0) return;
+  uint32_t el = now - s.t0;
+  if (el > s.total) { s.active = false; return; }
+  uint16_t e = (uint16_t)el;
+
+  Segment seg; memcpy_P(&seg, &SEGMENTS[s.seg], sizeof(Segment));
+  uint16_t start = seg.start, len = seg.len;
+  if (len < 1) return;
+
+  uint8_t env, heat, upTo;
+  envelope(s, e, env, heat, upTo);
+
+  if (e < s.leaderMs) {                                   // stepped leader
+    uint16_t head = (uint16_t)(((uint32_t)e * len) / s.leaderMs);
+    for (uint16_t i = 0; i <= head && i < len; i++) {
+      uint8_t b = qsub8(240, (uint8_t)((head - i) * TRAIL));
+      if (b) addLed(start + i, b, 200, i, len);
+    }
+  }
+  if (env) {                                              // return + restrikes
+    uint16_t lim = (uint16_t)(((uint32_t)len * upTo) >> 8) + 1;
+    if (lim > len) lim = len;
+    for (uint16_t i = 0; i < lim; i++) {
+      uint8_t flick = qsub8(255, hash8(start + i, frameNo >> 1) >> 3);
+      addLed(start + i, scale8(env, flick), heat, i, len);
+    }
+  }
+
+  // the cloud lights in sympathy, by distance from the channel root
+  uint8_t glowP = 0;
+  if (e > s.lastEnd) {
+    uint32_t q = (uint32_t)(e - s.lastEnd) * 255 / CLOUD_MS;
+    glowP = q > 255 ? 255 : (uint8_t)q;
+  }
+  uint8_t cenv = env;
+  if (glowP) {
+    uint8_t inv = qsub8(255, glowP);
+    uint8_t fall = scale8(inv, inv);
+    if (fall > cenv) cenv = fall;
+  }
+  cenv = scale8(cenv, CLOUD_FLASH);
+  if (cenv > 1) {
+    uint8_t rum = RUMBLE ? scale8(RUMBLE, sin8((uint8_t)((now * 3) >> 4) + s.rumbleSeed)) : 0;
+    uint8_t cheat = qsub8(heat, scale8(glowP, 200));
+    for (uint8_t g = 0; g < NUM_SEGMENTS; g++) {
+      Segment cs; memcpy_P(&cs, &SEGMENTS[g], sizeof(Segment));
+      if (cs.isBolt) continue;
+      for (uint16_t j = cs.start; j < cs.start + cs.len; j++) {
+        int16_t dx = (int16_t)pgm_read_byte(&LED_X[j]) - (int16_t)s.ox;
+        int16_t dy = (int16_t)pgm_read_byte(&LED_Y[j]) - (int16_t)s.oy;
+        uint8_t atten = qsub8(255, scale8(dist8(dx, dy), CLOUD_SPREAD));
+        if (!atten) continue;
+        uint8_t v = scale8(cenv, atten);
+        if (rum) v = qsub8(v, scale8(v, scale8(rum, hash8(j, s.rumbleSeed))));
+        if (v) addLed(j, v, cheat, 0, 1);
+      }
+    }
+  }
+}
+
+void renderAmbient(uint32_t now) {
+  if (!AMB_LEVEL) return;
+  uint8_t t1 = (uint8_t)((now * AMB_SPEED) / 64);
+  uint8_t t2 = (uint8_t)((now * AMB_SPEED) / 160);
+  for (uint8_t g = 0; g < NUM_SEGMENTS; g++) {
+    Segment cs; memcpy_P(&cs, &SEGMENTS[g], sizeof(Segment));
+    if (cs.isBolt) continue;
+    for (uint16_t j = cs.start; j < cs.start + cs.len; j++) {
+      uint8_t a = sin8(t1 + (uint8_t)(j * 5));
+      uint8_t b = sin8(t2 - (uint8_t)(j * 11) + 64);
+      uint8_t v = scale8(scale8(a, b), AMB_LEVEL);
+      if (v) addLed(j, v, 40, 0, 1);
+    }
+  }
+}
+
+/* ── main loop ──────────────────────────────────────────────── */
+uint8_t randomBolt() {
+  uint8_t bolts[NUM_SEGMENTS], n = 0;
+  for (uint8_t i = 0; i < NUM_SEGMENTS; i++)
+    if (pgm_read_byte(&SEGMENTS[i].isBolt)) bolts[n++] = i;
+  return n ? bolts[random8() % n] : 0;
+}
+
+void setup() {
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setBrightness(MASTER);
+  random16_set_seed(0x1337);            // same seed the bench previewed
+  for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
+}
+
+void loop() {
+  uint32_t now = millis();
+  frameNo++;
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  renderAmbient(now);
+
+  if (now >= nextStrikeAt) {
+    uint8_t seg = randomBolt();
+    trigger(seg, now);
+    if (random8() < DBL_CHANCE) trigger(randomBolt(), now + rndR(40, CLUSTER_MS + 1));
+    nextStrikeAt = now + rndR(GAP_MIN, GAP_MAX + 1);
+  }
+
+  for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
+
+  FastLED.show();
+}
+`;
+}
+
+document.getElementById('copyCode').addEventListener('click', async () => {
+  const said = document.getElementById('copySaid');
+  try {
+    await navigator.clipboard.writeText(codeOut.textContent);
+    said.textContent = exportTab === 'ino' ? 'Sketch copied' : 'Layout copied';
+  } catch(e){
+    const sel = window.getSelection(); const rg = document.createRange();
+    rg.selectNodeContents(codeOut); sel.removeAllRanges(); sel.addRange(rg);
+    said.textContent = 'Selected — press ⌘C';
+  }
+  setTimeout(() => { said.textContent = ''; }, 2600);
+});
+document.getElementById('importJson').addEventListener('click', () => {
+  const txt = prompt('Paste a layout.json exported from Bolt Bench:');
+  if (!txt) return;
+  try {
+    const o = JSON.parse(txt);
+    if (!o.runs || !Array.isArray(o.runs)) throw new Error('no runs');
+    runs = o.runs.map((r, i) => ({
+      id: 'r' + (uid++), name: String(r.name || 'Run ' + i),
+      role: r.role === 'bolt' ? 'bolt' : 'cloud',
+      count: Math.max(1, Math.min(NUM_LEDS, +r.count || 30)),
+      smooth: r.smooth !== false, d: r.d || null,
+      pts: Array.isArray(r.pts) ? r.pts.map(p => [+p[0], +p[1]]) : [[300,200],[500,200]],
+    }));
+    if (o.params) for (const k of Object.keys(P)) if (typeof o.params[k] === 'number') P[k] = o.params[k];
+    selRun = 0; strikes = [];
+    syncParamUI(); rebuildLayout(); renderRuns(); syncPaste(); save();
+    document.getElementById('copySaid').textContent = 'Layout loaded';
+    setTimeout(() => { document.getElementById('copySaid').textContent = ''; }, 2600);
+  } catch(e){
+    alert("That did not parse as a Bolt Bench layout. Expected the JSON from the layout.json tab.");
+  }
+});
+
+/* ── persistence ─────────────────────────────────────────────────── */
+const KEY = 'boltbench.v1';
+let saveT = 0;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    try { localStorage.setItem(KEY, layoutJSON()); } catch(e){}
+  }, 400);
+}
+function load(){
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return;
+    const o = JSON.parse(raw);
+    if (o && Array.isArray(o.runs) && o.runs.length){
+      runs = o.runs.map((r, i) => ({
+        id: 'r' + (uid++), name: String(r.name || 'Run ' + i),
+        role: r.role === 'bolt' ? 'bolt' : 'cloud',
+        count: Math.max(1, Math.min(NUM_LEDS, +r.count || 30)),
+        smooth: r.smooth !== false, d: r.d || null,
+        pts: Array.isArray(r.pts) ? r.pts.map(p => [+p[0], +p[1]]) : [[300,200],[500,200]],
+      }));
+    }
+    if (o && o.params) for (const k of Object.keys(P)) if (typeof o.params[k] === 'number') P[k] = o.params[k];
+  } catch(e){}
+}
+
+/* ── boot ────────────────────────────────────────────────────────── */
+load();
+buildParams();
+syncParamUI();
+sizeStage(); sizeStrip(); sizeScope();
+rebuildLayout();
+renderRuns();
+syncPaste();
+setMode('preview');
+triggerStrike(2);          // open with a bolt in flight, not an empty stage
+
+const ro = new ResizeObserver(() => { sizeStage(); sizeStrip(); sizeScope(); });
+ro.observe(stageWrap);
+ro.observe(document.querySelector('.readout'));
+
+let lastTs = performance.now(), traceAcc = 0;
+function loop(ts){
+  const dt = Math.min(64, ts - lastTs); lastTs = ts;
+  if (playing) simTime += dt * speed;
+  updateSim(simTime);
+  traceAcc += dt * speed;
+  if (traceAcc >= 15.6){ traceAcc = 0; sampleTrace(); }
+  drawStage(); drawStrip(); drawScope();
+  document.getElementById('clockChip').textContent = (simTime / 1000).toFixed(2) + ' s';
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
