@@ -12,12 +12,34 @@ CRGB leds[NUM_LEDS];
    per pixel, so addLed() stays three mix8 and three scale8. */
 CRGB coolC, hotC;
 
+/* Runtime copies of the tuning.h values, seeded from them at boot. Anything
+   a knob can move has to live in RAM rather than as a #define; everything
+   else stays a compile-time constant. Silent — updatePalette() is called on
+   every hue change, so logging here would flood the port while you turn. */
+uint8_t  g_hue    = HUE;
+uint8_t  g_sat    = SAT;
+uint8_t  g_hotSat = HOT_SAT;
+uint8_t  g_bright = 0;                 // resolved in setup()
+uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
+
 void updatePalette() {
-  hsv2rgb_rainbow(CHSV(HUE, SAT,     255), coolC);
-  hsv2rgb_rainbow(CHSV(HUE, HOT_SAT, 255), hotC);
-  LOG("[storm] palette hue=%u sat=%u hotSat=%u -> cool #%02X%02X%02X hot #%02X%02X%02X\n",
-      (unsigned)HUE, (unsigned)SAT, (unsigned)HOT_SAT,
-      coolC.r, coolC.g, coolC.b, hotC.r, hotC.g, hotC.b);
+  hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
+  hsv2rgb_rainbow(CHSV(g_hue, g_hotSat, 255), hotC);
+}
+
+/* ── clock ──────────────────────────────────────────────────── */
+/* A virtual clock, not scaled millis(). Scaling millis() directly would
+   teleport every strike in flight the instant the speed knob moved; this
+   accumulates instead, so a speed change is smooth. It is the same thing
+   the bench does with simTime += dt * speed. */
+uint32_t stormClock() {
+  static uint32_t vClock = 0, lastReal = 0;
+  uint32_t real = millis();
+  uint32_t dt = real - lastReal;
+  lastReal = real;
+  if (dt > 100) dt = 100;              // never fast-forward through a stall
+  vClock += ((uint32_t)dt * g_speedQ8) >> 8;
+  return vClock;
 }
 
 /* ── helpers ────────────────────────────────────────────────── */
@@ -283,6 +305,9 @@ void logBoot() {
           (unsigned)sg.len, "fork", pa.name, (unsigned)(sg.forkAt * 100 / 255));
     }
   }
+  LOG("[storm] palette hue=%u sat=%u hotSat=%u -> cool #%02X%02X%02X hot #%02X%02X%02X\n",
+      (unsigned)g_hue, (unsigned)g_sat, (unsigned)g_hotSat,
+      coolC.r, coolC.g, coolC.b, hotC.r, hotC.g, hotC.b);
   LOG("[storm] frame buffer %u B, strike pool %u B, segment table %u B\n\n",
       (unsigned)sizeof(leds), (unsigned)sizeof(strikes), (unsigned)sizeof(SEGMENTS));
 #endif

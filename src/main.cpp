@@ -7,6 +7,7 @@
    palettes live there.
    ───────────────────────────────────────────────────────────── */
 #include "storm.h"
+#include "controls.h"
 
 void setup() {
 #if STORM_LOG
@@ -15,7 +16,8 @@ void setup() {
   while (!Serial && millis() - waited < 1500) { }   // but never hang without a host
 #endif
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  FastLED.setBrightness(scale8(MASTER, TRIM));
+  g_bright = scale8(MASTER, TRIM);
+  FastLED.setBrightness(g_bright);
   updatePalette();
   // 300 px at full white is ~18 A at 5 V and this animation really does flash
   // most of the cloud at once. Uncomment to let FastLED hold the peak down:
@@ -23,10 +25,12 @@ void setup() {
   random16_set_seed(0x1337);            // same seed the bench previewed
   for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
   logBoot();
+  controlsBegin();
 }
 
 void loop() {
-  uint32_t now = millis();
+  controlsUpdate(false);
+  uint32_t now = stormClock();     // virtual: the speed knob stretches this
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   renderAmbient(now);
@@ -41,19 +45,23 @@ void loop() {
   for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
 
 #if STORM_LOG && STORM_LOG_STATS
+  // wall-clock, not the virtual clock — otherwise the speed knob would scale
+  // the reported frame rate along with the storm
   static uint32_t statAt = 0, frames = 0, peakmW = 0;
+  uint32_t realNow = millis();
   frames++;
   uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
   if (mw > peakmW) peakmW = mw;
-  if (now - statAt >= STORM_LOG_STATS) {
-    uint32_t span = now - statAt ? now - statAt : 1;
+  if (realNow - statAt >= STORM_LOG_STATS) {
+    uint32_t span = realNow - statAt ? realNow - statAt : 1;
     uint8_t act = 0;
     for (uint8_t i = 0; i < MAX_STRIKES; i++) if (strikes[i].active) act++;
-    LOG("[storm] %lu fps  active=%u  peak draw=%lu mA  next strike in %lu ms\n",
+    LOG("[storm] %lu fps  active=%u  peak draw=%lu mA  speed %u.%02ux  next strike in %lu ms\n",
         (unsigned long)(frames * 1000UL / span), (unsigned)act,
         (unsigned long)(peakmW / 5),
+        (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
         (unsigned long)(nextStrikeAt > now ? nextStrikeAt - now : 0));
-    statAt = now; frames = 0; peakmW = 0;
+    statAt = realNow; frames = 0; peakmW = 0;
   }
 #endif
 

@@ -375,7 +375,7 @@ textarea.paste{
     <details>
       <summary>Export <span class="note">Arduino / FastLED</span></summary>
       <div class="body">
-        <p class="blurb">A direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same <code>hsv2rgb_rainbow</code>. Drop these in <code>src/</code>. Only <code>config.h</code> is yours to keep: the other four are overwritten every export.</p>
+        <p class="blurb">A direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same <code>hsv2rgb_rainbow</code>. Drop these in <code>src/</code>. <code>config.h</code> and <code>controls.h</code> are yours to keep: the other four are overwritten every export.</p>
         <div class="tabs" id="tabs"></div>
         <pre class="code" id="codeOut"></pre>
         <div class="exp-acts">
@@ -1493,6 +1493,154 @@ function layoutJSON(){
   }, null, 2);
 }
 
+const FILE_CONTROLS_H = `/* ─────────────────────────────────────────────────────────────
+   controls.h — YOURS. Bolt Bench never overwrites this file.
+
+   Three B10K linear pots on ADC1. Set POTS_ENABLE to 0 and every
+   value falls back to tuning.h, with no ADC code compiled in.
+
+   Wiring, per pot: outer leg -> 3V3, other outer leg -> GND, wiper ->
+   the ADC pin, plus 100 nF from wiper to GND at the board end. 3.3 V,
+   NOT 5 V — these pins are not 5 V tolerant. Swap the outer legs to
+   reverse a knob's direction.
+   ───────────────────────────────────────────────────────────── */
+#pragma once
+#include <Arduino.h>
+#include "storm.h"
+
+#ifndef POTS_ENABLE
+  #define POTS_ENABLE 1
+#endif
+
+/* ADC1 only. ADC2 (GPIO 0/2/4/12-15/25-27) stops working the moment WiFi
+   is enabled, and GPIO2 is the strip anyway. GPIO34 is input-only, which
+   is a feature for an analog input — it cannot be driven by accident. */
+#define POT_HUE_PIN    GPIO_NUM_32
+#define POT_SPEED_PIN  GPIO_NUM_33
+#define POT_LEVEL_PIN  GPIO_NUM_34
+
+/* The ESP32 ADC flattens near both rails, so trim a dead zone off each end
+   to make 0 and 255 actually reachable. Widen if a knob never quite bottoms
+   out; narrow if it hits the stop early. */
+#define POT_MV_MIN     80
+#define POT_MV_MAX     3140
+
+/* EMA smoothing, as a right-shift: ema += (raw - ema) >> POT_SMOOTH.
+   Note this is tuned for OUR loop rate, which is not fast. 300 WS2812Bs
+   take ~9 ms to clock out, so loop() runs near 105 Hz and each pot is
+   visited every third pass — about 35 Hz. At shift 2 that settles in
+   ~110 ms, which feels immediate on a knob. Code written for a loop that
+   free-runs at thousands of hertz uses a far gentler alpha; copying that
+   value here would make the knobs feel like treacle. */
+#define POT_SMOOTH     2
+#define POT_OVERSAMPLE 4      // averaged per visit; halves the white noise
+
+/* Speed knob range, as powers of two either side of centre. 2 -> 0.25x at
+   one stop, 1.00x at midpoint, ~4x at the other. Geometric, because a
+   linear speed knob spends most of its travel somewhere useless. */
+#define POT_SPEED_OCTAVES  2.0f
+#define POT_SPEED_SNAP     6      // counts either side of centre that snap to 1.00x
+
+#define POT_LOG_MS     250        // rate limit; turning a knob must not flood the port
+
+#if POTS_ENABLE
+
+struct Pot {
+  gpio_num_t pin;
+  int32_t    ema;      // smoothed millivolts, 8.8 fixed point
+  uint8_t    out;      // 0..255 after dead zone and hysteresis
+};
+
+static Pot potHue   = { POT_HUE_PIN,   0, 0 };
+static Pot potSpeed = { POT_SPEED_PIN, 0, 0 };
+static Pot potLevel = { POT_LEVEL_PIN, 0, 0 };
+
+static inline int32_t potSample(const Pot &p) {
+  uint32_t acc = 0;
+  for (uint8_t i = 0; i < POT_OVERSAMPLE; i++) acc += analogReadMilliVolts(p.pin);
+  return (int32_t)((acc / POT_OVERSAMPLE) << 8);
+}
+
+static inline uint8_t potScale(const Pot &p) {
+  int32_t mv = p.ema >> 8;
+  if (mv <= POT_MV_MIN) return 0;
+  if (mv >= POT_MV_MAX) return 255;
+  return (uint8_t)(((mv - POT_MV_MIN) * 255) / (POT_MV_MAX - POT_MV_MIN));
+}
+
+static inline uint8_t potRead(Pot &p) {
+  p.ema += (potSample(p) - p.ema) >> POT_SMOOTH;
+  uint8_t v = potScale(p);
+  // one-count hysteresis: without it the last bit dithers and the hue crawls
+  // while nobody is touching anything
+  if (v > (uint8_t)(p.out + 1) || (uint8_t)(v + 1) < p.out) p.out = v;
+  return p.out;
+}
+
+static inline void potPrime(Pot &p) {
+  p.ema = potSample(p);
+  p.out = potScale(p);
+}
+
+void controlsUpdate(bool force) {
+  static uint8_t turn = 0;
+  static uint32_t loggedAt = 0;
+  static uint16_t lastSpeed = 0;
+
+  // One pot per pass. Reading all three every frame costs ~1 ms of a ~9.5 ms
+  // frame; round-robin keeps that under 4% and each knob still updates ~35x
+  // a second, which is far quicker than a hand can turn one.
+  if (force) { potPrime(potHue); potPrime(potSpeed); potPrime(potLevel); }
+  else {
+    switch (turn) {
+      case 0: potRead(potHue);   break;
+      case 1: potRead(potSpeed); break;
+      default: potRead(potLevel); break;
+    }
+    turn = (turn + 1) % 3;
+  }
+
+  if (force || potHue.out != g_hue) { g_hue = potHue.out; updatePalette(); }
+
+  uint8_t sp = potSpeed.out;
+  if (sp > 128 - POT_SPEED_SNAP && sp < 128 + POT_SPEED_SNAP) sp = 128;   // find 1.00x by feel
+  uint16_t q8 = (uint16_t)(256.0f * powf(2.0f, ((int)sp - 128) / 128.0f * POT_SPEED_OCTAVES) + 0.5f);
+  if (force || q8 != lastSpeed) { lastSpeed = q8; g_speedQ8 = q8; }
+
+  // Placeholder: a plain dimmer until the severity crossfade lands, at which
+  // point this knob moves gap, stroke count, leader speed and afterglow
+  // together instead.
+  uint8_t ceil8 = scale8(MASTER, TRIM);
+  uint8_t b = (uint8_t)(20 + ((uint32_t)potLevel.out * (ceil8 > 20 ? ceil8 - 20 : 0) / 255));
+  if (force || b != g_bright) { g_bright = b; FastLED.setBrightness(b); }
+
+#if STORM_LOG
+  if (millis() - loggedAt >= POT_LOG_MS) {
+    static uint8_t ph = 255, pl = 255; static uint16_t pq = 0;
+    if (force || potHue.out != ph || potLevel.out != pl || g_speedQ8 != pq) {
+      ph = potHue.out; pl = potLevel.out; pq = g_speedQ8;
+      LOG("[pots]  hue=%-3u speed=%u.%02ux bright=%-3u\\n", (unsigned)ph,
+          (unsigned)(pq >> 8), (unsigned)((pq & 0xFF) * 100 / 256), (unsigned)g_bright);
+      loggedAt = millis();
+    }
+  }
+#endif
+}
+
+void controlsBegin() {
+  analogReadResolution(12);
+  controlsUpdate(true);
+  LOG("[pots]  hue GPIO%u, speed GPIO%u, level GPIO%u\\n",
+      (unsigned)POT_HUE_PIN, (unsigned)POT_SPEED_PIN, (unsigned)POT_LEVEL_PIN);
+}
+
+#else   /* POTS_ENABLE == 0 — knobs compiled out, tuning.h rules */
+
+inline void controlsUpdate(bool) {}
+inline void controlsBegin() { LOG("[pots]  disabled\\n"); }
+
+#endif
+`;
 const FILE_CONFIG_H = `/* ─────────────────────────────────────────────────────────────
    config.h — YOURS. Bolt Bench never overwrites this file.
 
@@ -1564,7 +1712,7 @@ const Palette PALETTES[] = {
 };
 #define NUM_PALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
 `;
-const FILE_STORM_H  = `/* Storm engine, generated by Bolt Bench — overwritten on export. */
+const FILE_STORM_H = `/* Storm engine, generated by Bolt Bench — overwritten on export. */
 #pragma once
 #include <FastLED.h>
 #include "config.h"
@@ -1578,12 +1726,34 @@ CRGB leds[NUM_LEDS];
    per pixel, so addLed() stays three mix8 and three scale8. */
 CRGB coolC, hotC;
 
+/* Runtime copies of the tuning.h values, seeded from them at boot. Anything
+   a knob can move has to live in RAM rather than as a #define; everything
+   else stays a compile-time constant. Silent — updatePalette() is called on
+   every hue change, so logging here would flood the port while you turn. */
+uint8_t  g_hue    = HUE;
+uint8_t  g_sat    = SAT;
+uint8_t  g_hotSat = HOT_SAT;
+uint8_t  g_bright = 0;                 // resolved in setup()
+uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
+
 void updatePalette() {
-  hsv2rgb_rainbow(CHSV(HUE, SAT,     255), coolC);
-  hsv2rgb_rainbow(CHSV(HUE, HOT_SAT, 255), hotC);
-  LOG("[storm] palette hue=%u sat=%u hotSat=%u -> cool #%02X%02X%02X hot #%02X%02X%02X\\n",
-      (unsigned)HUE, (unsigned)SAT, (unsigned)HOT_SAT,
-      coolC.r, coolC.g, coolC.b, hotC.r, hotC.g, hotC.b);
+  hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
+  hsv2rgb_rainbow(CHSV(g_hue, g_hotSat, 255), hotC);
+}
+
+/* ── clock ──────────────────────────────────────────────────── */
+/* A virtual clock, not scaled millis(). Scaling millis() directly would
+   teleport every strike in flight the instant the speed knob moved; this
+   accumulates instead, so a speed change is smooth. It is the same thing
+   the bench does with simTime += dt * speed. */
+uint32_t stormClock() {
+  static uint32_t vClock = 0, lastReal = 0;
+  uint32_t real = millis();
+  uint32_t dt = real - lastReal;
+  lastReal = real;
+  if (dt > 100) dt = 100;              // never fast-forward through a stall
+  vClock += ((uint32_t)dt * g_speedQ8) >> 8;
+  return vClock;
 }
 
 /* ── helpers ────────────────────────────────────────────────── */
@@ -1849,6 +2019,9 @@ void logBoot() {
           (unsigned)sg.len, "fork", pa.name, (unsigned)(sg.forkAt * 100 / 255));
     }
   }
+  LOG("[storm] palette hue=%u sat=%u hotSat=%u -> cool #%02X%02X%02X hot #%02X%02X%02X\\n",
+      (unsigned)g_hue, (unsigned)g_sat, (unsigned)g_hotSat,
+      coolC.r, coolC.g, coolC.b, hotC.r, hotC.g, hotC.b);
   LOG("[storm] frame buffer %u B, strike pool %u B, segment table %u B\\n\\n",
       (unsigned)sizeof(leds), (unsigned)sizeof(strikes), (unsigned)sizeof(SEGMENTS));
 #endif
@@ -1863,6 +2036,7 @@ const FILE_MAIN_CPP = `/* ──────────────────
    palettes live there.
    ───────────────────────────────────────────────────────────── */
 #include "storm.h"
+#include "controls.h"
 
 void setup() {
 #if STORM_LOG
@@ -1871,7 +2045,8 @@ void setup() {
   while (!Serial && millis() - waited < 1500) { }   // but never hang without a host
 #endif
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  FastLED.setBrightness(scale8(MASTER, TRIM));
+  g_bright = scale8(MASTER, TRIM);
+  FastLED.setBrightness(g_bright);
   updatePalette();
   // 300 px at full white is ~18 A at 5 V and this animation really does flash
   // most of the cloud at once. Uncomment to let FastLED hold the peak down:
@@ -1879,10 +2054,12 @@ void setup() {
   random16_set_seed(0x1337);            // same seed the bench previewed
   for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
   logBoot();
+  controlsBegin();
 }
 
 void loop() {
-  uint32_t now = millis();
+  controlsUpdate(false);
+  uint32_t now = stormClock();     // virtual: the speed knob stretches this
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   renderAmbient(now);
@@ -1897,19 +2074,23 @@ void loop() {
   for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
 
 #if STORM_LOG && STORM_LOG_STATS
+  // wall-clock, not the virtual clock — otherwise the speed knob would scale
+  // the reported frame rate along with the storm
   static uint32_t statAt = 0, frames = 0, peakmW = 0;
+  uint32_t realNow = millis();
   frames++;
   uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
   if (mw > peakmW) peakmW = mw;
-  if (now - statAt >= STORM_LOG_STATS) {
-    uint32_t span = now - statAt ? now - statAt : 1;
+  if (realNow - statAt >= STORM_LOG_STATS) {
+    uint32_t span = realNow - statAt ? realNow - statAt : 1;
     uint8_t act = 0;
     for (uint8_t i = 0; i < MAX_STRIKES; i++) if (strikes[i].active) act++;
-    LOG("[storm] %lu fps  active=%u  peak draw=%lu mA  next strike in %lu ms\\n",
+    LOG("[storm] %lu fps  active=%u  peak draw=%lu mA  speed %u.%02ux  next strike in %lu ms\\n",
         (unsigned long)(frames * 1000UL / span), (unsigned)act,
         (unsigned long)(peakmW / 5),
+        (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
         (unsigned long)(nextStrikeAt > now ? nextStrikeAt - now : 0));
-    statAt = now; frames = 0; peakmW = 0;
+    statAt = realNow; frames = 0; peakmW = 0;
   }
 #endif
 
@@ -2010,6 +2191,7 @@ ${d('TRIM', P.trim)}
 function buildFiles(){
   return {
     'config.h':    FILE_CONFIG_H,
+    'controls.h':  FILE_CONTROLS_H,
     'layout.h':    fileLayoutH(),
     'tuning.h':    fileTuningH(),
     'storm.h':     FILE_STORM_H,
@@ -2026,7 +2208,8 @@ function buildTabs(){
   tabsEl.textContent = '';
   for (const name of Object.keys(buildFiles())){
     const b = el('button', 'btn' + (name === exportTab ? ' on' : ''), name);
-    if (name === 'config.h') b.title = 'Starter only — the bench never overwrites your config.h';
+    if (name === 'config.h' || name === 'controls.h')
+      b.title = 'Starter only — the bench never overwrites this file';
     b.addEventListener('click', () => { exportTab = name; buildTabs(); buildExport(); });
     tabsEl.append(b);
   }

@@ -166,6 +166,7 @@ The **Export** panel emits five source files plus the layout. They are split alo
 | File | Owner | Overwritten on export |
 |---|---|---|
 | `config.h` | **you** — pins, logging, palettes | never; the bench emits it as a starter only |
+| `controls.h` | **you** — pot pins and mapping | never; starter only |
 | `layout.h` | generator — segments, `LED_X`/`LED_Y` | wholesale |
 | `tuning.h` | generator — animation parameters | wholesale |
 | `storm.h` | generator — the engine | wholesale |
@@ -236,6 +237,20 @@ Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top 
 - `MAX_STRIKES` is 6 and `MAX_STROKES` is 6. Push the storm parameters hard enough and strikes will be dropped rather than queued.
 - Preview-only controls — dot size, bloom — model light diffusing through batting. They are not exported, because the controller has no equivalent.
 
+## Knobs
+
+Three B10K linear pots on ADC1 — hue on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. Wiring is on the [pot wiring card](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb).
+
+Three decisions worth knowing about, because the obvious version of each is wrong:
+
+**The speed knob drives a virtual clock, not scaled `millis()`.** Scaling `millis()` directly would teleport every strike in flight the moment the knob moved. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`. The mapping is geometric, 0.25× to 4×, because a linear speed knob spends most of its travel somewhere useless; it snaps to exactly 1.00× near centre so you can find it by feel.
+
+**Smoothing is tuned for *this* loop rate.** 300 WS2812Bs take ~9 ms to clock out, so `loop()` runs near 105 Hz — thousands of times slower than a sketch that just polls. An EMA alpha borrowed from a fast-looping project makes the knobs feel like treacle here. Each pot is visited every third pass (~35 Hz) with a shift of 2, settling in ~110 ms.
+
+**One pot per pass, oversampled four times.** Reading all three every frame costs about 1 ms of a 9.5 ms budget — a tenth of the frame. Round-robin keeps it under 4% while still updating each knob far faster than a hand can turn it. Four samples per visit halves the white noise before the EMA sees it, which is cheaper than a long time constant.
+
+A one-count hysteresis sits on the output. Without it the bottom bit dithers and the hue crawls while nobody is touching anything.
+
 ## Building the firmware
 
 ```bash
@@ -255,6 +270,7 @@ lightning-simulator/
 ├── platformio.ini    ESP32 build config
 └── src/
     ├── config.h      YOURS: pins, logging, palettes — never regenerated
+    ├── controls.h    YOURS: potentiometer pins and mapping — never regenerated
     ├── layout.h      generated: segment table, pixel coordinates
     ├── tuning.h      generated: animation parameters and palette
     ├── storm.h       generated: the engine
