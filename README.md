@@ -239,7 +239,7 @@ Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top 
 
 ## Knobs
 
-Three B10K linear pots on ADC1 — palette on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. Wiring is on the [pot wiring card](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb).
+Three B10K linear pots on ADC1 — palette on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. Wiring is on the [pot wiring card](docs/pot-wiring-card.html) ([published](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb)).
 
 **All three knobs are detented.** A continuous knob on a noisy 12-bit ADC is the worst of both worlds: never quite still, never repeatable. A detent holds until the knob moves three quarters of a step, which puts the hysteresis band far above the noise floor:
 
@@ -278,6 +278,8 @@ lightning-simulator/
 ├── index.html        the bench: routing, tuning, export
 ├── README.md         this file
 ├── platformio.ini    ESP32 build config
+├── docs/
+│   └── pot-wiring-card.html   bench reference; source for the published card
 └── src/
     ├── config.h      YOURS: pins, logging, palettes — never regenerated
     ├── controls.h    YOURS: potentiometer pins and mapping — never regenerated

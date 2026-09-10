@@ -1,0 +1,212 @@
+<title>Pot Wiring Card</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#f6f3ee;
+  --card:#fffdfa;
+  --ink:#1b1e22;
+  --ink-2:#5a6068;
+  --ink-3:#8b9098;
+  --rule:#ddd6cc;
+  --rule-soft:#eae4db;
+  --v33:#c8382e;      /* red   — 3.3 V */
+  --gnd:#33383d;      /* black — ground */
+  --sig:#2b7cb5;      /* blue  — signal */
+  --sig2:#3f8f5a;     /* green */
+  --sig3:#b3811c;     /* yellow */
+  --danger:#a8261c;
+  --danger-bg:#fbeae8;
+  --ui:"Archivo","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#14171b; --card:#1b1f24; --ink:#e8eaed; --ink-2:#a2a9b2; --ink-3:#6e757e;
+    --rule:#2e343b; --rule-soft:#23282e;
+    --v33:#e8695c; --gnd:#aab2bb; --sig:#5fa8d8; --sig2:#63b47f; --sig3:#d8ab4a;
+    --danger:#ef7b6e; --danger-bg:#2c1a18;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#14171b; --card:#1b1f24; --ink:#e8eaed; --ink-2:#a2a9b2; --ink-3:#6e757e;
+  --rule:#2e343b; --rule-soft:#23282e;
+  --v33:#e8695c; --gnd:#aab2bb; --sig:#5fa8d8; --sig2:#63b47f; --sig3:#d8ab4a;
+  --danger:#ef7b6e; --danger-bg:#2c1a18;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--ui);font-size:15px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:660px;margin:0 auto;padding:26px 20px 56px}
+
+header{margin-bottom:22px}
+.eyebrow{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:7px;
+}
+h1{
+  font-size:29px;font-weight:700;font-stretch:112%;letter-spacing:-.01em;
+  margin:0 0 6px;text-wrap:balance;
+}
+.sub{color:var(--ink-2);font-size:14.5px;margin:0;max-width:52ch}
+
+.danger{
+  display:flex;gap:12px;align-items:flex-start;
+  background:var(--danger-bg);border-left:3px solid var(--danger);
+  border-radius:0 4px 4px 0;padding:13px 15px;margin:20px 0 26px;
+}
+.danger b{color:var(--danger);font-weight:700;display:block;margin-bottom:2px;font-size:14.5px}
+.danger p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.5}
+
+h2{
+  font-size:12px;font-weight:600;font-stretch:110%;text-transform:uppercase;
+  letter-spacing:.13em;color:var(--ink-2);
+  margin:34px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--rule);
+}
+h2:first-of-type{margin-top:0}
+
+figure{margin:0 0 8px;background:var(--card);border:1px solid var(--rule);
+  border-radius:5px;padding:14px 10px 8px;overflow-x:auto}
+figure svg{display:block;width:100%;height:auto;min-width:390px}
+figcaption{font-size:12.5px;color:var(--ink-3);margin-top:6px;padding:0 5px 4px}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{
+  text-align:left;font-family:var(--mono);font-size:10px;font-weight:500;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);
+  padding:0 10px 7px 0;border-bottom:1px solid var(--rule);
+}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.k{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.n{color:var(--ink-2);font-size:13.5px}
+code{font-family:var(--mono);font-size:.9em;background:var(--rule-soft);
+  padding:1px 4px;border-radius:3px}
+
+.loom{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.loom li{display:flex;align-items:center;gap:11px;padding:9px 0;
+  border-bottom:1px solid var(--rule-soft);font-size:14px}
+.loom li:last-child{border-bottom:none}
+.dot{width:13px;height:13px;border-radius:50%;flex:none;border:1px solid rgba(0,0,0,.18)}
+.loom .to{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);margin-left:auto;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+
+pre{
+  margin:0;background:var(--card);border:1px solid var(--rule);border-radius:5px;
+  padding:13px 14px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;
+  line-height:1.62;color:var(--ink);
+}
+.note{font-size:13.5px;color:var(--ink-2);margin:11px 0 0}
+.note strong{color:var(--ink);font-weight:600}
+
+footer{margin-top:38px;padding-top:16px;border-top:1px solid var(--rule);
+  font-size:13px;color:var(--ink-3)}
+footer p{margin:0 0 7px}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Bolt Bench · storm controller</div>
+  <h1>Pot Wiring Card</h1>
+  <p class="sub">Three B10K linear pots into an ESP32 DevKit, for palette, speed and level.</p>
+</header>
+
+<div class="danger">
+  <div>
+    <b>3.3 V — never 5 V</b>
+    <p>The ADC pins are not 5 V tolerant, and the strip's 5 V rail will be right there on the same bench. Feeding a pot from it kills the pin, often the chip. Use a different wire colour for the two rails.</p>
+  </div>
+</div>
+
+<h2>One pot</h2>
+<figure>
+<svg viewBox="0 0 460 292" role="img" aria-label="Potentiometer wired as a voltage divider between 3.3 volts and ground, wiper to the ADC pin with a 100 nanofarad capacitor to ground">
+  <!-- 3V3 rail -->
+  <line x1="56" y1="46" x2="200" y2="46" stroke="var(--v33)" stroke-width="2.4"/>
+  <line x1="200" y1="46" x2="200" y2="92" stroke="var(--v33)" stroke-width="2.4"/>
+  <circle cx="56" cy="46" r="4.5" fill="var(--v33)"/>
+  <text x="14" y="51" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="500" fill="var(--v33)">3V3</text>
+
+  <!-- pot body -->
+  <rect x="160" y="92" width="80" height="92" rx="3" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="200" y="133" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="var(--ink)">B10K</text>
+  <text x="200" y="152" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">linear</text>
+
+  <!-- wiper arrow into the body -->
+  <polygon points="240,138 253,132 253,144" fill="var(--sig)"/>
+  <line x1="253" y1="138" x2="340" y2="138" stroke="var(--sig)" stroke-width="2.4"/>
+  <text x="348" y="143" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="var(--sig)">GPIO32</text>
+
+  <!-- 100 nF from wiper to ground -->
+  <line x1="296" y1="138" x2="296" y2="192" stroke="var(--gnd)" stroke-width="2"/>
+  <line x1="282" y1="192" x2="310" y2="192" stroke="var(--gnd)" stroke-width="2.4"/>
+  <line x1="282" y1="200" x2="310" y2="200" stroke="var(--gnd)" stroke-width="2.4"/>
+  <line x1="296" y1="200" x2="296" y2="246" stroke="var(--gnd)" stroke-width="2"/>
+  <text x="318" y="201" font-family="IBM Plex Mono, monospace" font-size="12" fill="var(--ink-2)">100 nF</text>
+
+  <!-- GND rail -->
+  <line x1="200" y1="184" x2="200" y2="246" stroke="var(--gnd)" stroke-width="2.4"/>
+  <line x1="56" y1="246" x2="296" y2="246" stroke="var(--gnd)" stroke-width="2.4"/>
+  <circle cx="56" cy="246" r="4.5" fill="var(--gnd)"/>
+  <text x="14" y="251" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="500" fill="var(--gnd)">GND</text>
+
+  <!-- leg labels -->
+  <text x="210" y="74" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink-2)">pin 3 · CW end</text>
+  <text x="210" y="216" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink-2)">pin 1 · CCW end</text>
+  <text x="256" y="124" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--sig)">pin 2 · wiper</text>
+  <text x="14" y="282" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink-3)">swap pin 1 and pin 3 to reverse the knob</text>
+</svg>
+<figcaption>Solder the cap at the board end, not the pot end, so the whole wire run sits inside the filtered node.</figcaption>
+</figure>
+
+<h2>Knobs</h2>
+<table>
+  <tr><th>Pin</th><th>Knob</th><th>Range</th></tr>
+  <tr><td class="k">GPIO32</td><td>Palette</td><td class="n">5 detents, one whole look each — storm, tornado, voldemort, halloween, red planet</td></tr>
+  <tr><td class="k">GPIO33</td><td>Speed</td><td class="n">11 detents, 0.25× to 4× geometric; detent 5 is exactly 1.00×</td></tr>
+  <tr><td class="k">GPIO34</td><td>Level</td><td class="n">11 detents in 10% steps — brightness for now, storm severity later</td></tr>
+</table>
+<p class="note">All three knobs are detented, holding position until you move three quarters of a step. A continuous knob on a noisy 12-bit ADC is the worst of both worlds — never quite still, never repeatable. Each pot is read once every 750 ms, averaging 32 conversions.</p>
+<p class="note"><strong>The palette knob carries a whole look per detent, not a hue.</strong> Rotating hue alone leaves saturation wherever the export left it, and at low saturation every hue is the same near-white — so the knob appears dead. Fine hue control lives in the bench; the knob is for choosing.</p>
+<p class="note">All three are ADC1. <strong>ADC2 stops working entirely once WiFi is enabled</strong> — that rules out GPIO 0, 2, 4, 12–15 and 25–27. GPIO34 is input-only, which is a feature here: it cannot be driven as an output by mistake.</p>
+
+<h2>Five wires, not nine</h2>
+<ul class="loom">
+  <li><span class="dot" style="background:var(--v33)"></span> 3.3 V — daisy-chain to all three <code>pin 3</code> <span class="to">1 wire</span></li>
+  <li><span class="dot" style="background:var(--gnd)"></span> Ground — daisy-chain to all three <code>pin 1</code> <span class="to">1 wire</span></li>
+  <li><span class="dot" style="background:var(--sig)"></span> Hue wiper <span class="to">GPIO32</span></li>
+  <li><span class="dot" style="background:var(--sig2)"></span> Speed wiper <span class="to">GPIO33</span></li>
+  <li><span class="dot" style="background:var(--sig3)"></span> Level wiper <span class="to">GPIO34</span></li>
+</ul>
+<p class="note">Chain the two rails pot-to-pot inside the box so only five conductors leave it. Zip-tie a strain relief where the loom exits — panel pots have an anti-rotation tab, so either drill a 2 mm hole for it or snip it off, otherwise the pot spins in the panel and shears the wires.</p>
+
+<h2>Test before writing any code</h2>
+<pre>void setup() { Serial.begin(115200); }
+void loop() {
+  Serial.printf("%5d %5d %5d\n",
+    analogReadMilliVolts(GPIO_NUM_32),
+    analogReadMilliVolts(GPIO_NUM_33),
+    analogReadMilliVolts(GPIO_NUM_34));
+  delay(100);
+}</pre>
+<p class="note">Expect a smooth sweep from roughly <code>0</code> to <code>3300</code> mV, with about <strong>±10 mV of jitter sitting still</strong>. Use <code>analogReadMilliVolts</code> rather than <code>analogRead</code> — it applies the chip's factory calibration, and the raw reading flattens near both rails so the last of the knob travel does nothing.</p>
+
+<h2>If it misbehaves</h2>
+<table>
+  <tr><th>Symptom</th><th>Usually</th></tr>
+  <tr><td class="k">Random, unrelated<br>to the knob</td><td class="n">No common ground between the ESP32 and the pot, or a broken wiper wire leaving the pin floating</td></tr>
+  <tr><td class="k">Stuck at 0<br>or at max</td><td class="n">Outer legs shorted, or the wiper is on an outer leg — meter it: the middle pin should change as you turn</td></tr>
+  <tr><td class="k">Backwards</td><td class="n">Swap pin 1 and pin 3</td></tr>
+  <tr><td class="k">Jumps around<br>±100 mV</td><td class="n">Missing 100 nF, or the cap is at the pot end instead of the board end</td></tr>
+  <tr><td class="k">Dead in the<br>last few degrees</td><td class="n">Normal ADC roll-off — widen <code>POT_MV_MIN</code> / narrow <code>POT_MV_MAX</code> in <code>controls.h</code></td></tr>
+  <tr><td class="k">Reads nothing<br>once WiFi is on</td><td class="n">A pot landed on an ADC2 pin. Move it to GPIO32–39</td></tr>
+</table>
+
+<footer>
+  <p><strong>Strip, while you're in there:</strong> ~330 Ω in series with the data line, 1000 µF across 5 V and ground at the injection point, and every ground tied together.</p>
+  <p>Set <code>POTS_ENABLE 0</code> in <code>controls.h</code> to compile the knobs out entirely and fall back to the values in <code>tuning.h</code>.</p>
+</footer>
+</div>
