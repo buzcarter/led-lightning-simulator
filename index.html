@@ -319,6 +319,7 @@ textarea.paste{
         <div class="exp-acts">
           <button class="btn tiny" id="addCloud">+ cloud run</button>
           <button class="btn tiny" id="addBolt">+ bolt</button>
+          <button class="btn tiny" id="addFork">+ fork</button>
           <button class="btn tiny" id="resetLayout">Reset layout</button>
         </div>
         <textarea class="paste" id="dPaste" placeholder="Paste an SVG path d= for the selected run (viewBox 1000×760)…" spellcheck="false"></textarea>
@@ -441,6 +442,8 @@ const SPEC = [
   ['gBolt','rgapMin', 'Restrike near', 10,  400, 5, 'ms'],
   ['gBolt','rgapMax', 'Restrike far',  10,  400, 5, 'ms'],
   ['gBolt','partial', 'Partial restrike', 0, 255, 1, ''],
+  ['gBolt','forkDim',   'Fork brightness',40, 255, 1, ''],
+  ['gBolt','forkFollow','Fork restrike',   0, 255, 1, ''],
   ['gBolt','glowMs',  'Afterglow',     40, 1200,10, 'ms'],
 
   ['gCloud','ambLevel',   'Ambient level',   0,  140, 1, ''],
@@ -461,21 +464,22 @@ const P = {
   leadMin:22, leadMax:88, trail:7, taper:70,
   strkMin:1, strkMax:4, durMin:12, durMax:46,
   rgapMin:30, rgapMax:140, partial:110, glowMs:330,
+  forkDim:185, forkFollow:140,
   ambLevel:34, ambSpeed:14, cloudFlash:205, cloudSpread:150, cloudMs:540, rumble:70,
   master:210, tint:150, dotSize:12, bloom:80,
 };
 
 const PRESETS = {
-  'Distant storm': { gapMin:2600, gapMax:8000, leadMin:60, leadMax:200, trail:14, strkMin:1, strkMax:2,
+  'Distant storm': { forkDim:150, forkFollow:90, gapMin:2600, gapMax:8000, leadMin:60, leadMax:200, trail:14, strkMin:1, strkMax:2,
                      durMin:20, durMax:60, glowMs:520, cloudFlash:150, cloudSpread:190, cloudMs:900,
                      ambLevel:22, master:150, tint:200, partial:60, rumble:110 },
-  'Rolling':       { gapMin:900, gapMax:4200, leadMin:22, leadMax:88, trail:7, strkMin:1, strkMax:4,
+  'Rolling':       { forkDim:185, forkFollow:140, gapMin:900, gapMax:4200, leadMin:22, leadMax:88, trail:7, strkMin:1, strkMax:4,
                      durMin:12, durMax:46, glowMs:330, cloudFlash:205, cloudSpread:150, cloudMs:540,
                      ambLevel:34, master:210, tint:150, partial:110, rumble:70 },
-  'Direct hit':    { gapMin:280, gapMax:1500, leadMin:8, leadMax:26, trail:4, strkMin:2, strkMax:6,
+  'Direct hit':    { forkDim:220, forkFollow:200, gapMin:280, gapMax:1500, leadMin:8, leadMax:26, trail:4, strkMin:2, strkMax:6,
                      durMin:8, durMax:30, rgapMin:16, rgapMax:70, glowMs:200, cloudFlash:255,
                      cloudSpread:60, cloudMs:300, ambLevel:44, master:255, tint:60, partial:190, rumble:30 },
-  'Heat lightning':{ gapMin:1400, gapMax:5200, leadMin:120, leadMax:240, trail:34, strkMin:1, strkMax:1,
+  'Heat lightning':{ forkDim:120, forkFollow:40, gapMin:1400, gapMax:5200, leadMin:120, leadMax:240, trail:34, strkMin:1, strkMax:1,
                      durMin:60, durMax:150, glowMs:700, cloudFlash:255, cloudSpread:230, cloudMs:1300,
                      ambLevel:52, master:170, tint:225, partial:0, rumble:150 },
 };
@@ -488,19 +492,28 @@ const CLOUD_SIL = "M 178 336 C 96 336 58 278 92 228 C 46 174 96 108 172 120 C 19
 
 function defaultRuns(){
   return [
-    { id:'r0', name:'Cloud body', role:'cloud', count:150, smooth:true, d:null, pts:[
+    { id:'r0', name:'Cloud body', role:'cloud', count:132, smooth:true, parent:null, forkAt:128, d:null, pts:[
       [140,272],[200,214],[282,178],[372,166],[462,148],[552,140],[642,150],[722,176],[792,214],
       [806,252],[730,264],[640,248],[544,238],[450,246],[354,236],[264,252],[184,264],
       [166,298],[250,310],[350,300],[456,308],[560,298],[660,302],[746,290],[802,272],
     ]},
-    { id:'r1', name:'Bolt · left', role:'bolt', count:50, smooth:false, d:null, pts:[
+    { id:'r1', name:'Bolt · left', role:'bolt', count:38, smooth:false, parent:null, forkAt:128, d:null, pts:[
       [276,316],[248,374],[292,380],[250,450],[296,456],[238,544],[272,540],[220,634],
     ]},
-    { id:'r2', name:'Bolt · centre', role:'bolt', count:50, smooth:false, d:null, pts:[
+    { id:'r2', name:'Fork · left', role:'bolt', count:18, smooth:false, parent:'r1', forkAt:140, d:null, pts:[
+      [296,456],[340,510],[312,520],[352,590],[330,600],
+    ]},
+    { id:'r3', name:'Bolt · centre', role:'bolt', count:44, smooth:false, parent:null, forkAt:128, d:null, pts:[
       [506,332],[478,394],[528,400],[472,474],[524,480],[462,570],[500,566],[450,668],
     ]},
-    { id:'r3', name:'Bolt · right', role:'bolt', count:50, smooth:false, d:null, pts:[
+    { id:'r4', name:'Fork · centre', role:'bolt', count:22, smooth:false, parent:'r3', forkAt:115, d:null, pts:[
+      [472,474],[420,530],[452,540],[398,610],[428,618],[386,684],
+    ]},
+    { id:'r5', name:'Bolt · right', role:'bolt', count:34, smooth:false, parent:null, forkAt:128, d:null, pts:[
       [712,320],[750,380],[704,388],[762,456],[712,462],[778,552],[734,548],[792,638],
+    ]},
+    { id:'r6', name:'Fork · right', role:'bolt', count:12, smooth:false, parent:'r5', forkAt:102, d:null, pts:[
+      [762,456],[812,510],[786,518],[828,588],
     ]},
   ];
 }
@@ -537,9 +550,43 @@ function ptsToD(pts, smooth){
 }
 const runD = r => r.d || ptsToD(r.pts, r.smooth);
 
+/* Resolve id-based parent links into indices, break any cycle, and snap each
+   fork's first point onto its parent's path — the rope really is attached. */
+function resolveTree(){
+  const byId = new Map();
+  runs.forEach((r, i) => { if (r.id) byId.set(r.id, i); });
+  runs.forEach(r => { r.parentIdx = (r.parent != null && byId.has(r.parent)) ? byId.get(r.parent) : -1; r.children = []; });
+  runs.forEach((r, i) => {                       // walk up; a cycle detaches the run
+    let hops = 0, cur = r.parentIdx;
+    while (cur >= 0 && hops++ < runs.length){
+      if (cur === i){ r.parentIdx = -1; r.parent = null; break; }
+      cur = runs[cur].parentIdx;
+    }
+  });
+  runs.forEach((r, i) => { if (r.parentIdx >= 0 && r.parentIdx !== i) runs[r.parentIdx].children.push(i); });
+  for (const r of runs){
+    if (r.parentIdx < 0 || r.d || !r.pts || !r.pts.length) continue;
+    const par = runs[r.parentIdx];
+    const pd = runD(par);
+    if (!pd) continue;
+    try {
+      mpath.setAttribute('d', pd);
+      const pt = mpath.getPointAtLength(mpath.getTotalLength() * (r.forkAt || 0) / 255);
+      r.pts[0] = [Math.round(pt.x), Math.round(pt.y)];
+    } catch(e){}
+  }
+}
+const rootOf = i => { let hops = 0; while (i >= 0 && runs[i].parentIdx >= 0 && hops++ < 8) i = runs[i].parentIdx; return i; };
+function isDescendant(a, b){          // is a in b's subtree?
+  let hops = 0;
+  while (a >= 0 && hops++ < 8){ if (a === b) return true; a = runs[a].parentIdx; }
+  return false;
+}
+
 function rebuildLayout(){
   let idx = 0;
   ledRun.fill(-1);
+  resolveTree();
   for (let s = 0; s < runs.length; s++){
     const r = runs[s];
     r.start = idx;
@@ -583,7 +630,8 @@ let simTime = 0;
 let nextStrikeAt = 700;
 let storming = true;
 
-function boltRuns(){ return runs.map((r, i) => [r, i]).filter(([r]) => r.role === 'bolt' && r.drawn > 1); }
+// only root channels are struck; forks fire because their parent did
+function boltRuns(){ return runs.map((r, i) => [r, i]).filter(([r]) => r.role === 'bolt' && r.drawn > 1 && r.parentIdx < 0); }
 
 function makeStrike(segIdx, t0){
   const seg = runs[segIdx];
@@ -607,6 +655,10 @@ function makeStrike(segIdx, t0){
   s.glowMs = Math.max(40, P.glowMs + rndR(0, 200) - 80);
   s.cloudMs = Math.max(60, P.cloudMs);
   s.total = s.lastEnd + Math.max(s.glowMs, s.cloudMs);
+  // Which restrikes travel into the forks. Real restrikes often follow only the
+  // main channel, so this is rolled per stroke; the return stroke always forks.
+  s.forkMask = 1;
+  for (let k = 1; k < n; k++) if (random8() < P.forkFollow) s.forkMask |= (1 << k);
   s.ox = seg.nOX; s.oy = seg.nOY;
   s.rumbleSeed = random8();
   return s;
@@ -623,46 +675,70 @@ function triggerStrike(segIdx){
 
 /* channel envelope: 0..255 intensity plus 0..255 "heat" (white ↔ blue) */
 function strikeEnvelope(s, e){
-  let env = 0, heat = 0, upTo = 255;
-  for (const st of s.strokes){
+  let env = 0, heat = 0, upTo = 255, idx = -1;
+  for (let k = 0; k < s.strokes.length; k++){
+    const st = s.strokes[k];
     if (e >= st.at && e < st.at + st.dur){
       const p = ((e - st.at) * 255 / st.dur) | 0;
       const v = scale8(st.b, qsub8(255, scale8(p, 150)));
-      if (v > env){ env = v; heat = 255; upTo = st.upTo; }
+      if (v > env){ env = v; heat = 255; upTo = st.upTo; idx = k; }
     }
   }
   if (e > s.lastEnd){
     const p = Math.min(255, ((e - s.lastEnd) * 255 / s.glowMs) | 0);
     const fall = scale8(scale8(qsub8(255, p), qsub8(255, p)), 150);
-    if (fall > env){ env = fall; heat = qsub8(255, p); upTo = 255; }
+    if (fall > env){ env = fall; heat = qsub8(255, p); upTo = 255; idx = -1; }
   }
-  return { env, heat, upTo };
+  return { env, heat, upTo, idx };   // idx -1 = afterglow, when everything glows
+}
+
+/* One channel of the strike tree. A fork's leader starts when the parent's
+   leader head reaches the attachment point, and runs at the same propagation
+   velocity — so a branch and its trunk reach ground at about the same moment,
+   the way real lightning does. */
+function renderChannel(s, e, segIdx, leaderStart, leaderDur, dim, depth, frame){
+  const seg = runs[segIdx];
+  if (!seg || seg.drawn < 1 || depth > 3) return;
+  const start = seg.start, len = seg.drawn;
+  const cur = s.cur;
+
+  const le = e - leaderStart;
+  if (le >= 0 && le < leaderDur){
+    const head = ((le * len * 256 / leaderDur) | 0) >> 8;
+    for (let i = 0; i <= head && i < len; i++){
+      const b = qsub8(240, (head - i) * P.trail);
+      if (b) addLed(start + i, scale8(b, dim), 200, i, len, frame);
+    }
+  }
+
+  const partake = depth === 0 || cur.idx < 0 || ((s.forkMask >> cur.idx) & 1);
+  if (cur.env > 0 && partake){
+    const lim = Math.min(len, ((len * cur.upTo) >> 8) + 1);
+    for (let i = 0; i < lim; i++){
+      const flick = qsub8(255, hash8(start + i, frame >> 1) >> 3);   // ±12%
+      addLed(start + i, scale8(scale8(cur.env, flick), dim), cur.heat, i, len, frame);
+    }
+  }
+
+  for (const c of seg.children){
+    const cLen = runs[c].drawn;
+    if (cLen < 1) continue;
+    renderChannel(s, e, c,
+      leaderStart + ((leaderDur * (runs[c].forkAt || 0)) >> 8),
+      Math.max(4, (leaderDur * cLen / len) | 0),
+      scale8(dim, P.forkDim), depth + 1, frame);
+  }
 }
 
 function renderStrike(s, now, frame){
   const e = now - s.t0;
   if (e < 0 || e > s.total) return;
   const seg = runs[s.seg];
-  const start = seg.start, len = seg.drawn;
-  if (len < 1) return;
+  if (!seg || seg.drawn < 1) return;
 
-  const { env, heat, upTo } = strikeEnvelope(s, e);
-
-  // --- the channel itself
-  if (e < s.leaderMs){
-    const head = ((e * len * 256 / s.leaderMs) | 0) >> 8;
-    for (let i = 0; i <= head && i < len; i++){
-      const b = qsub8(240, (head - i) * P.trail);
-      if (b) addLed(start + i, b, 200, i, len, frame);
-    }
-  }
-  if (env > 0){
-    const lim = Math.min(len, ((len * upTo) >> 8) + 1);
-    for (let i = 0; i < lim; i++){
-      const flick = qsub8(255, hash8(start + i, frame >> 1) >> 3);   // ±12%
-      addLed(start + i, scale8(env, flick), heat, i, len, frame);
-    }
-  }
+  s.cur = strikeEnvelope(s, e);
+  const { env, heat } = s.cur;
+  renderChannel(s, e, s.seg, 0, s.leaderMs, 255, 0, frame);
 
   // --- the cloud picking it up, by 2-D distance from the bolt's root
   const glowP = e > s.lastEnd ? Math.min(255, ((e - s.lastEnd) * 255 / s.cloudMs) | 0) : 0;
@@ -852,12 +928,14 @@ function drawHandles(){
   const r = runs[selRun];
   if (!r || r.d) return;
   ctx.globalCompositeOperation = 'source-over';
+  const pinned = r.parentIdx >= 0;
   r.pts.forEach((p, i) => {
     const [x, y] = toScreen(p[0], p[1]);
-    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, TAU);
+    const isAnchor = pinned && i === 0;
+    ctx.beginPath(); ctx.arc(x, y, isAnchor ? 4 : 5.5, 0, TAU);
     ctx.fillStyle = (dragPt === i) ? '#82c8ff' : '#0b0f17';
     ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = '#82c8ff'; ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = isAnchor ? '#f0a94c' : '#82c8ff'; ctx.stroke();
     if (i === 0){
       ctx.fillStyle = '#82c8ff';
       ctx.font = '600 10px "IBM Plex Mono",monospace';
@@ -1053,8 +1131,8 @@ function renderRuns(){
     nm.addEventListener('input', () => { r.name = nm.value; buildExport(); save(); });
     const acts = el('div', 'run-acts');
     if (r.role === 'bolt'){
-      const f = el('button', 'iconbtn fire', '⚡'); f.title = 'Fire this bolt';
-      f.addEventListener('click', e => { e.stopPropagation(); triggerStrike(i); });
+      const f = el('button', 'iconbtn fire', '⚡'); f.title = 'Fire this channel';
+      f.addEventListener('click', e => { e.stopPropagation(); triggerStrike(rootOf(i)); });
       acts.append(f);
     }
     const up = el('button', 'iconbtn', '↑'); up.title = 'Earlier in wiring order';
@@ -1092,6 +1170,38 @@ function renderRuns(){
       meta.append(c);
     }
     row.append(top, meta);
+
+    if (r.role === 'bolt'){
+      const fr = el('div', 'run-meta');
+      fr.append(el('span', null, 'fork of'));
+      const psel = el('select', 'role');
+      psel.setAttribute('aria-label', 'Parent channel');
+      const none = el('option', null, '— root —'); none.value = ''; psel.append(none);
+      runs.forEach((o, j) => {
+        if (j === i || o.role !== 'bolt' || isDescendant(j, i)) return;
+        const op = el('option', null, o.name); op.value = o.id;
+        if (r.parent === o.id) op.selected = true;
+        psel.append(op);
+      });
+      psel.addEventListener('change', () => {
+        r.parent = psel.value || null;
+        strikes = []; rebuildLayout(); renderRuns(); save();
+      });
+      fr.append(psel);
+      if (r.parentIdx >= 0){
+        fr.append(el('span', null, 'at'));
+        const fa = document.createElement('input');
+        fa.type = 'number'; fa.min = 0; fa.max = 100;
+        fa.value = Math.round((r.forkAt || 0) * 100 / 255);
+        fa.setAttribute('aria-label', 'Attachment point along parent');
+        fa.addEventListener('input', () => {
+          r.forkAt = Math.max(0, Math.min(255, Math.round((+fa.value || 0) * 255 / 100)));
+          rebuildLayout(); save();
+        });
+        fr.append(fa, el('span', null, '% down'));
+      }
+      row.append(fr);
+    }
     runsEl.append(row);
   });
   document.getElementById('routeNote').textContent = `${runs.length} runs`;
@@ -1124,6 +1234,7 @@ function nearestHandle(vx, vy){
   const r = runs[selRun]; if (!r || r.d) return -1;
   const tol = 11 / view.s;
   for (let i = 0; i < r.pts.length; i++){
+    if (i === 0 && r.parentIdx >= 0) continue;      // pinned to the parent channel
     if (Math.hypot(r.pts[i][0] - vx, r.pts[i][1] - vy) < tol) return i;
   }
   return -1;
@@ -1148,7 +1259,7 @@ cv.addEventListener('pointerdown', e => {
     const ri = runAt(vx, vy);
     if (ri >= 0){
       selRun = ri; renderRuns(); syncPaste();
-      if (runs[ri].role === 'bolt') triggerStrike(ri);
+      if (runs[ri].role === 'bolt') triggerStrike(rootOf(ri));
     }
   }
 });
@@ -1210,15 +1321,32 @@ addEventListener('keydown', e => {
 });
 
 document.getElementById('addCloud').addEventListener('click', () => {
-  runs.push({ id: 'r' + (uid++), name: 'Cloud run ' + runs.length, role: 'cloud', count: 30, smooth: true, d: null,
-    pts: [[250, 200], [420, 190], [590, 205]] });
+  runs.push({ id: 'r' + (uid++), name: 'Cloud run ' + runs.length, role: 'cloud', count: 30, smooth: true,
+    parent: null, forkAt: 128, d: null, pts: [[250, 200], [420, 190], [590, 205]] });
   selRun = runs.length - 1; rebuildLayout(); renderRuns(); syncPaste(); setMode('edit'); save();
 });
 document.getElementById('addBolt').addEventListener('click', () => {
-  runs.push({ id: 'r' + (uid++), name: 'Bolt ' + (runs.filter(r => r.role === 'bolt').length + 1), role: 'bolt', count: 40, smooth: false, d: null,
-    pts: [[420, 330], [392, 400], [440, 408], [396, 490], [438, 498], [388, 590]] });
+  runs.push({ id: 'r' + (uid++), name: 'Bolt ' + (runs.filter(r => r.role === 'bolt' && !r.parent).length + 1), role: 'bolt', count: 40, smooth: false,
+    parent: null, forkAt: 128, d: null, pts: [[420, 330], [392, 400], [440, 408], [396, 490], [438, 498], [388, 590]] });
   selRun = runs.length - 1; rebuildLayout(); renderRuns(); syncPaste(); setMode('edit'); save();
 });
+document.getElementById('addFork').addEventListener('click', () => {
+  let base = selRun;
+  if (!runs[base] || runs[base].role !== 'bolt'){
+    const b = boltRuns(); if (!b.length) return;
+    base = b[0][1];
+  }
+  const par = runs[base];
+  runs.push({ id: 'r' + (uid++), name: 'Fork off ' + par.name, role: 'bolt', count: 16, smooth: false,
+    parent: par.id, forkAt: 128, d: null, pts: [[0,0],[42,58],[14,70],[52,138]] });
+  const f = runs[runs.length - 1];
+  rebuildLayout();                              // snaps pts[0] onto the parent
+  const ax = f.pts[0][0], ay = f.pts[0][1];
+  f.pts = [[ax, ay], [ax + 42, ay + 58], [ax + 14, ay + 70], [ax + 52, ay + 138]];
+  selRun = runs.length - 1;
+  rebuildLayout(); renderRuns(); syncPaste(); setMode('edit'); save();
+});
+
 document.getElementById('resetLayout').addEventListener('click', () => {
   runs = defaultRuns(); selRun = 0; strikes = [];
   rebuildLayout(); renderRuns(); syncPaste(); save();
@@ -1249,7 +1377,8 @@ function tableU8(arr, n, perLine){
 function layoutJSON(){
   return JSON.stringify({
     format: 'bolt-bench/1', numLeds: NUM_LEDS, viewBox: [VB.w, VB.h],
-    runs: runs.map(r => ({ name: r.name, role: r.role, count: r.count, smooth: r.smooth,
+    runs: runs.map(r => ({ id: r.id, name: r.name, role: r.role, count: r.count, smooth: r.smooth,
+                           parent: r.parent || null, forkAt: r.forkAt == null ? 128 : r.forkAt,
                            start: r.start, d: r.d || undefined, pts: r.d ? undefined : r.pts })),
     params: { ...P },
   }, null, 2);
@@ -1259,12 +1388,15 @@ function buildExport(){
   if (exportTab === 'json'){ codeOut.textContent = layoutJSON(); return; }
   const segLines = runs.map((r, i) =>
     `  { ${String(r.start).padStart(3)}, ${String(r.drawn || 0).padStart(3)}, ${r.role === 'bolt' ? 1 : 0}, ` +
-    `${String(r.nOX || 0).padStart(3)}, ${String(r.nOY || 0).padStart(3)} },  // ${r.name}`).join('\n');
+    `${String(r.nOX || 0).padStart(3)}, ${String(r.nOY || 0).padStart(3)}, ` +
+    `${String(r.parentIdx == null ? -1 : r.parentIdx).padStart(2)}, ${String(r.forkAt == null ? 128 : r.forkAt).padStart(3)} },` +
+    `  // ${r.name}${r.parentIdx >= 0 ? ' — forks off ' + runs[r.parentIdx].name : ''}`).join('\n');
   const defs = runs.map((r, i) => `#define ${ident(r.name, i).padEnd(22)} ${i}`).join('\n');
 
   codeOut.textContent = `/* ─────────────────────────────────────────────────────────────
    StormCloud — generated by Bolt Bench
    ${runs.length} runs · ${usedLeds}/${NUM_LEDS} pixels allocated
+   ${runs.filter(r => r.role === 'bolt' && r.parentIdx < 0).length} root channels, ${runs.filter(r => r.parentIdx >= 0).length} forks
 
    The colour math here is the same uint8 arithmetic the bench
    previews, and random16() is FastLED's own LCG, so seeding the
@@ -1289,6 +1421,8 @@ struct Segment {
   uint16_t len;
   uint8_t  isBolt;
   uint8_t  ox, oy;      // channel root, normalised 0..255
+  int8_t   parent;      // -1 = root channel; otherwise the channel it forks off
+  uint8_t  forkAt;      // 0..255 along the parent, where the branch leaves
 };
 
 ${defs}
@@ -1322,6 +1456,8 @@ ${tableU8(nrmY, NUM_LEDS, 20)}
 #define RGAP_MIN      ${Math.min(P.rgapMin, P.rgapMax)}
 #define RGAP_MAX      ${Math.max(P.rgapMin, P.rgapMax)}
 #define PARTIAL       ${P.partial}
+#define FORK_DIM      ${P.forkDim}
+#define FORK_FOLLOW   ${P.forkFollow}
 #define GLOW_MS       ${P.glowMs}
 #define AMB_LEVEL     ${P.ambLevel}
 #define AMB_SPEED     ${P.ambSpeed}
@@ -1365,6 +1501,7 @@ struct Strike {
   uint16_t glowMs;
   uint16_t total;
   uint8_t  ox, oy;
+  uint8_t  forkMask;    // bit k set = restrike k travels into the forks
   uint8_t  rumbleSeed;
 };
 Strike strikes[MAX_STRIKES];
@@ -1392,6 +1529,9 @@ void makeStrike(uint8_t slot, uint8_t segIdx, uint32_t t0) {
   uint16_t g = GLOW_MS + rndR(0, 200); g = (g > 80) ? g - 80 : 40;
   s.glowMs = g;
   s.total  = s.lastEnd + (s.glowMs > CLOUD_MS ? s.glowMs : CLOUD_MS);
+  s.forkMask = 1;                       // the return stroke always forks
+  for (uint8_t k = 1; k < s.nStrokes; k++)
+    if (random8() < FORK_FOLLOW) s.forkMask |= (1 << k);
   s.ox = seg.ox; s.oy = seg.oy;
   s.rumbleSeed = random8();
 }
@@ -1421,14 +1561,14 @@ void addLed(uint16_t i, uint8_t bright, uint8_t heat, uint16_t pos, uint16_t len
 }
 
 /* ── channel envelope: intensity + heat (white ↔ blue) ──────── */
-void envelope(const Strike &s, uint16_t e, uint8_t &env, uint8_t &heat, uint8_t &upTo) {
-  env = 0; heat = 0; upTo = 255;
+void envelope(const Strike &s, uint16_t e, uint8_t &env, uint8_t &heat, uint8_t &upTo, int8_t &idx) {
+  env = 0; heat = 0; upTo = 255; idx = -1;
   for (uint8_t k = 0; k < s.nStrokes; k++) {
     const Stroke &st = s.strokes[k];
     if (e >= st.at && e < (uint16_t)(st.at + st.dur)) {
       uint8_t p = (uint8_t)((uint32_t)(e - st.at) * 255 / st.dur);
       uint8_t v = scale8(st.b, qsub8(255, scale8(p, 150)));
-      if (v > env) { env = v; heat = 255; upTo = st.upTo; }
+      if (v > env) { env = v; heat = 255; upTo = st.upTo; idx = (int8_t)k; }
     }
   }
   if (e > s.lastEnd) {
@@ -1436,7 +1576,50 @@ void envelope(const Strike &s, uint16_t e, uint8_t &env, uint8_t &heat, uint8_t 
     uint8_t p = q > 255 ? 255 : (uint8_t)q;
     uint8_t inv = qsub8(255, p);
     uint8_t fall = scale8(scale8(inv, inv), 150);
-    if (fall > env) { env = fall; heat = inv; upTo = 255; }
+    if (fall > env) { env = fall; heat = inv; upTo = 255; idx = -1; }  // afterglow: all channels
+  }
+}
+
+/* One channel of the strike tree.
+
+   A fork's leader starts when the parent's leader head reaches the attachment
+   point, and travels at the same propagation velocity (same pixels per ms), so
+   a branch and its trunk arrive at about the same moment — which is what real
+   forked lightning does. Depth is capped at 3. */
+void renderChannel(const Strike &s, uint16_t e, uint8_t segIdx,
+                   uint16_t leaderStart, uint16_t leaderDur, uint8_t dim, uint8_t depth,
+                   uint8_t env, uint8_t heat, uint8_t upTo, int8_t sidx) {
+  if (depth > 3) return;
+  Segment seg; memcpy_P(&seg, &SEGMENTS[segIdx], sizeof(Segment));
+  uint16_t start = seg.start, len = seg.len;
+  if (len < 1) return;
+
+  if (e >= leaderStart && (uint16_t)(e - leaderStart) < leaderDur) {   // stepped leader
+    uint16_t le = e - leaderStart;
+    uint16_t head = (uint16_t)(((uint32_t)le * len) / leaderDur);
+    for (uint16_t i = 0; i <= head && i < len; i++) {
+      uint8_t b = qsub8(240, (uint8_t)((head - i) * TRAIL));
+      if (b) addLed(start + i, scale8(b, dim), 200, i, len);
+    }
+  }
+
+  bool partake = (depth == 0) || (sidx < 0) || ((s.forkMask >> sidx) & 1);
+  if (env && partake) {                                   // return + restrikes
+    uint16_t lim = (uint16_t)(((uint32_t)len * upTo) >> 8) + 1;
+    if (lim > len) lim = len;
+    for (uint16_t i = 0; i < lim; i++) {
+      uint8_t flick = qsub8(255, hash8(start + i, frameNo >> 1) >> 3);
+      addLed(start + i, scale8(scale8(env, flick), dim), heat, i, len);
+    }
+  }
+
+  for (uint8_t c = 0; c < NUM_SEGMENTS; c++) {            // recurse into forks
+    Segment ch; memcpy_P(&ch, &SEGMENTS[c], sizeof(Segment));
+    if (ch.parent != (int8_t)segIdx || ch.len < 1) continue;
+    uint16_t cStart = leaderStart + (uint16_t)(((uint32_t)leaderDur * ch.forkAt) >> 8);
+    uint16_t cDur = (uint16_t)(((uint32_t)leaderDur * ch.len) / len);
+    if (cDur < 4) cDur = 4;
+    renderChannel(s, e, c, cStart, cDur, scale8(dim, FORK_DIM), depth + 1, env, heat, upTo, sidx);
   }
 }
 
@@ -1448,27 +1631,11 @@ void renderStrike(Strike &s, uint32_t now) {
   uint16_t e = (uint16_t)el;
 
   Segment seg; memcpy_P(&seg, &SEGMENTS[s.seg], sizeof(Segment));
-  uint16_t start = seg.start, len = seg.len;
-  if (len < 1) return;
+  if (seg.len < 1) return;
 
-  uint8_t env, heat, upTo;
-  envelope(s, e, env, heat, upTo);
-
-  if (e < s.leaderMs) {                                   // stepped leader
-    uint16_t head = (uint16_t)(((uint32_t)e * len) / s.leaderMs);
-    for (uint16_t i = 0; i <= head && i < len; i++) {
-      uint8_t b = qsub8(240, (uint8_t)((head - i) * TRAIL));
-      if (b) addLed(start + i, b, 200, i, len);
-    }
-  }
-  if (env) {                                              // return + restrikes
-    uint16_t lim = (uint16_t)(((uint32_t)len * upTo) >> 8) + 1;
-    if (lim > len) lim = len;
-    for (uint16_t i = 0; i < lim; i++) {
-      uint8_t flick = qsub8(255, hash8(start + i, frameNo >> 1) >> 3);
-      addLed(start + i, scale8(env, flick), heat, i, len);
-    }
-  }
+  uint8_t env, heat, upTo; int8_t sidx;
+  envelope(s, e, env, heat, upTo, sidx);
+  renderChannel(s, e, s.seg, 0, s.leaderMs, 255, 0, env, heat, upTo, sidx);
 
   // the cloud lights in sympathy, by distance from the channel root
   uint8_t glowP = 0;
@@ -1519,10 +1686,13 @@ void renderAmbient(uint32_t now) {
 }
 
 /* ── main loop ──────────────────────────────────────────────── */
+// forks are never struck directly — they light because their parent did
 uint8_t randomBolt() {
   uint8_t bolts[NUM_SEGMENTS], n = 0;
-  for (uint8_t i = 0; i < NUM_SEGMENTS; i++)
-    if (pgm_read_byte(&SEGMENTS[i].isBolt)) bolts[n++] = i;
+  for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
+    if (sg.isBolt && sg.parent < 0) bolts[n++] = i;
+  }
   return n ? bolts[random8() % n] : 0;
 }
 
@@ -1572,9 +1742,11 @@ document.getElementById('importJson').addEventListener('click', () => {
     const o = JSON.parse(txt);
     if (!o.runs || !Array.isArray(o.runs)) throw new Error('no runs');
     runs = o.runs.map((r, i) => ({
-      id: 'r' + (uid++), name: String(r.name || 'Run ' + i),
+      id: (typeof r.id === 'string' && r.id) ? r.id : 'r' + (uid++), name: String(r.name || 'Run ' + i),
       role: r.role === 'bolt' ? 'bolt' : 'cloud',
       count: Math.max(1, Math.min(NUM_LEDS, +r.count || 30)),
+      parent: (typeof r.parent === 'string' && r.parent) ? r.parent : null,
+      forkAt: Math.max(0, Math.min(255, +r.forkAt || 128)),
       smooth: r.smooth !== false, d: r.d || null,
       pts: Array.isArray(r.pts) ? r.pts.map(p => [+p[0], +p[1]]) : [[300,200],[500,200]],
     }));
@@ -1604,9 +1776,11 @@ function load(){
     const o = JSON.parse(raw);
     if (o && Array.isArray(o.runs) && o.runs.length){
       runs = o.runs.map((r, i) => ({
-        id: 'r' + (uid++), name: String(r.name || 'Run ' + i),
+        id: (typeof r.id === 'string' && r.id) ? r.id : 'r' + (uid++), name: String(r.name || 'Run ' + i),
         role: r.role === 'bolt' ? 'bolt' : 'cloud',
         count: Math.max(1, Math.min(NUM_LEDS, +r.count || 30)),
+        parent: (typeof r.parent === 'string' && r.parent) ? r.parent : null,
+        forkAt: Math.max(0, Math.min(255, +r.forkAt || 128)),
         smooth: r.smooth !== false, d: r.d || null,
         pts: Array.isArray(r.pts) ? r.pts.map(p => [+p[0], +p[1]]) : [[300,200],[500,200]],
       }));
@@ -1624,7 +1798,7 @@ rebuildLayout();
 renderRuns();
 syncPaste();
 setMode('preview');
-triggerStrike(2);          // open with a bolt in flight, not an empty stage
+triggerStrike(3);          // centre root channel: opens with a fork in flight
 
 const ro = new ResizeObserver(() => { sizeStage(); sizeStrip(); sizeScope(); });
 ro.observe(stageWrap);
