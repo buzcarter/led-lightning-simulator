@@ -8,6 +8,7 @@
 # Editors
 .vscode/
 .idea/
+.pio/
 *.swp
 *.swo
 *~
@@ -21,3 +22,8 @@ yarn-error.log*
 # Logs and scratch
 *.log
 tmp/
+
+# Arduino IDE / build artifacts
+build/
+*.hex
+*.elf
