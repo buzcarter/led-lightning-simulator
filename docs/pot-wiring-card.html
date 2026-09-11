@@ -227,14 +227,14 @@ footer p{margin:0 0 7px}
   <text x="14" y="115" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--sig2)">GPIO26</text>
   <line x1="76" y1="110" x2="106" y2="110" stroke="var(--ink-2)" stroke-width="2"/>
   <rect x="106" y="99" width="46" height="22" rx="2" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
-  <text x="129" y="114" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">68R</text>
+  <text x="129" y="114" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">41-68R</text>
   <line x1="152" y1="110" x2="214" y2="110" stroke="var(--ink-2)" stroke-width="2"/>
   <circle cx="246" cy="110" r="7" fill="var(--sig2)"/>
   <text x="264" y="114" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">G</text>
   <text x="14" y="163" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--sig)">GPIO13</text>
   <line x1="76" y1="158" x2="106" y2="158" stroke="var(--ink-2)" stroke-width="2"/>
   <rect x="106" y="147" width="46" height="22" rx="2" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>
-  <text x="129" y="162" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">68R</text>
+  <text x="129" y="162" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-2)">41-68R</text>
   <line x1="152" y1="158" x2="214" y2="158" stroke="var(--ink-2)" stroke-width="2"/>
   <circle cx="246" cy="158" r="7" fill="var(--sig)"/>
   <text x="264" y="162" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">B</text>
@@ -250,9 +250,10 @@ footer p{margin:0 0 7px}
 <table>
   <tr><th>Colour</th><th>Vf</th><th>Resistor</th><th>Current at 3.3 V</th></tr>
   <tr><td class="k">Red</td><td class="k">2.0 V</td><td class="k">220R</td><td class="k">5.9 mA</td></tr>
-  <tr><td class="k">Green</td><td class="k">2.9 V</td><td class="k">68R</td><td class="k">5.9 mA</td></tr>
-  <tr><td class="k">Blue</td><td class="k">3.0 V</td><td class="k">68R</td><td class="k">4.4 mA</td></tr>
+  <tr><td class="k">Green</td><td class="k">2.9 V</td><td class="k">39–68R</td><td class="k">5.9–9.8 mA</td></tr>
+  <tr><td class="k">Blue</td><td class="k">3.0 V</td><td class="k">39–68R</td><td class="k">4.4–7.3 mA</td></tr>
 </table>
+<p class="note"><strong>Red is the exception — keep it at 220R.</strong> It has a whole volt more headroom than the other two, so the same small resistor would put it at over 30 mA: past the LED's 20 mA rating and past comfortable GPIO drive. Green and blue are safe anywhere in that range because their forward voltages leave so little to drop.</p>
 <p class="note">Get the resistors right first; only then trim <code>MOOD_GAIN_R/G/B</code> by eye. With these values the currents roughly match, so expect to pull <em>green</em> down rather than push blue up — the eye is far more sensitive to green.</p>
 <p class="note">The LED shows the live palette colour, pulses on every strike, and rides up during chaos — one indicator covering mood, activity and fury.</p>
 
@@ -265,8 +266,8 @@ footer p{margin:0 0 7px}
   <li><span class="dot" style="background:var(--sig3)"></span> Level wiper <span class="to">GPIO34</span></li>
   <li><span class="dot" style="background:var(--ink-2)"></span> Chaos button — other leg to the ground rail <span class="to">GPIO27</span></li>
   <li><span class="dot" style="background:var(--v33)"></span> Mood LED red, via 220R <span class="to">GPIO25</span></li>
-  <li><span class="dot" style="background:var(--sig2)"></span> Mood LED green, via 68R <span class="to">GPIO26</span></li>
-  <li><span class="dot" style="background:var(--sig)"></span> Mood LED blue, via 68R <span class="to">GPIO13</span></li>
+  <li><span class="dot" style="background:var(--sig2)"></span> Mood LED green, via 41-68R <span class="to">GPIO26</span></li>
+  <li><span class="dot" style="background:var(--sig)"></span> Mood LED blue, via 41-68R <span class="to">GPIO13</span></li>
 </ul>
 <p class="note">The LED's common leg needs no wire of its own — it lands on the ground rail already there (or the 3.3 V rail, if yours is common anode).</p>
 <p class="note">Chain the two rails pot-to-pot inside the box so only five conductors leave it. Zip-tie a strain relief where the loom exits — panel pots have an anti-rotation tab, so either drill a 2 mm hole for it or snip it off, otherwise the pot spins in the panel and shears the wires.</p>

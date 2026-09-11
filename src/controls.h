@@ -80,9 +80,15 @@ static const uint16_t SPEED_Q8[SPEED_STEPS] = {
    3.3 V a uniform 220R gives red 5.9 mA, green 1.8 mA and blue 1.4 mA -- red
    four times the others, and blue looking dead. Size them per colour:
 
-       red    220R  ->  5.9 mA
-       green   68R  ->  5.9 mA
-       blue    68R  ->  4.4 mA
+       red      220R      ->  5.9 mA
+       green  39R-68R    ->  9.8 mA at 41R, 5.9 mA at 68R
+       blue   39R-68R    ->  7.3 mA at 41R, 4.4 mA at 68R
+
+   Anything in that range is fine for green and blue -- lower is brighter,
+   and even 39R stays inside both the LED's 20 mA rating and the ESP32's
+   comfortable 12 mA per pin. Red is the exception: it has a whole volt more
+   headroom, so the same small resistor would put it at over 30 mA, past both
+   limits. Red keeps the 220R.
 
    Get the resistors right first. Only then trim the gains below. */
 #ifndef MOOD_LED_ENABLE
