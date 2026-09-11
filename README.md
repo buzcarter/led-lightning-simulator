@@ -120,19 +120,23 @@ What makes this read as lightning is not the colour, it is the **heat axis** —
 leds[i].r = qadd8(leds[i].r, scale8(mix8(coolC.r, hotC.r, heat), bright));
 ```
 
-`coolC` is the fully saturated `HUE` at `SAT`. `hotC` is the same hue at `HOT_SAT`, which stays low so the return stroke keeps a near-white core. That constraint is the whole trick: push `HOT_SAT` up and the effect stops looking like lightning and starts looking like a coloured tube light. Hue belongs in the decay, not the strike.
+`coolC` is the fully saturated `HUE` at `SAT`. `hotC` is `HOT_HUE` at `HOT_SAT`, the latter kept low so the return stroke holds a near-white core. That constraint is the whole trick: push `HOT_SAT` up and the effect stops looking like lightning and starts looking like a coloured tube light. Hue belongs in the decay, not the strike.
+
+**The ramp shifts hue, not only saturation.** Desaturating toward white adds green and blue equally. From blue that gives blue-white and reads as hot; from red it gives *pink*, because nothing in nature gets hot by going pink — fire runs red → orange → yellow → white. `HOT_HUE` lets the peak sit at a different hue from the afterglow, so a red palette cools from an amber core rather than a salmon one. Leave it equal to `HUE` where no shift is wanted.
+
+The tell is the gap between green and blue at the peak, not the ordering of the channels. Red planet used to peak at `#f69e95` — green 158, blue 149, a 9-point gap, which is pink. It now peaks at `#d7af86` — a 41-point gap, unmistakably amber.
 
 Both endpoints are resolved **once per frame**, not per pixel, so the per-pixel cost is three `mix8` and three `scale8` — the same as when the palette was hardcoded blue.
 
 `TRIM` compensates for the eye rather than the LED. Green sits at the peak of human luminous sensitivity, so a green flash at `MASTER` 170 reads about twice as bright as blue at 170. Starting points live in `PALETTES[]` in `config.h`:
 
-| Palette | Hue | Sat | Hot sat | Trim | Reads as |
-|---|---|---|---|---|---|
-| storm | 160 | 200 | 40 | 255 | cold blue-white |
-| tornado | 80 | 165 | 30 | 200 | sickly yellow-green — the dread is in the *low* saturation |
-| voldemort | 96 | 220 | 45 | 190 | vivid unnatural green — menace rather than dread |
-| halloween | 192 | 205 | 55 | 235 | purple |
-| red planet | 8 | 235 | 60 | 245 | mars dust |
+| Palette | Hue | Hot hue | Sat | Hot sat | Trim | Reads as |
+|---|---|---|---|---|---|---|
+| storm | 160 | 160 | 200 | 40 | 255 | cold blue-white |
+| tornado | 80 | 64 | 165 | 30 | 200 | sickly yellow-green — the dread is in the *low* saturation |
+| voldemort | 96 | 96 | 220 | 45 | 190 | vivid unnatural green — menace rather than dread |
+| halloween | 192 | 192 | 205 | 55 | 235 | purple |
+| red planet | 4 | 32 | 235 | 70 | 245 | deep red cooling from an amber core |
 
 The bench runs FastLED's own `hsv2rgb_rainbow`, transcribed, so the swatches and the preview land on the same RGB the strip will.
 

@@ -35,5 +35,6 @@
    See PALETTES[] in config.h for starting points. */
 #define HUE           160      // FastLED hue: 0 red, 64 yellow, 96 green, 160 blue, 192 purple
 #define SAT            19      // carried over from the old TINT; ~200 for a storm blue you can see
+#define HOT_HUE       160      // peak hue; equal to HUE means no shift along the heat ramp
 #define HOT_SAT         0      // saturation at the white-hot peak; keep low
 #define TRIM          255      // per-palette brightness trim applied to MASTER

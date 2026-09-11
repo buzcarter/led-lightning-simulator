@@ -27,6 +27,7 @@ CRGB coolC, hotC;
 
 uint8_t  g_hue    = HUE;
 uint8_t  g_sat    = SAT;
+uint8_t  g_hotHue = HOT_HUE;
 uint8_t  g_hotSat = HOT_SAT;
 uint8_t  g_bright = 0;                 // resolved in setup()
 uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
@@ -45,7 +46,7 @@ uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
 void updatePalette() {
   hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
-  hsv2rgb_rainbow(CHSV(g_hue, g_hotSat, 255), hotC);
+  hsv2rgb_rainbow(CHSV(g_hotHue, g_hotSat, 255), hotC);
 }
 
 /* ── clock ──────────────────────────────────────────────────── */
@@ -381,8 +382,8 @@ void logBoot() {
           (unsigned)sg.len, "fork", pa.name, (unsigned)(sg.forkAt * 100 / 255));
     }
   }
-  LOG("[storm] palette hue=%u sat=%u hotSat=%u -> cool #%02X%02X%02X hot #%02X%02X%02X\n",
-      (unsigned)g_hue, (unsigned)g_sat, (unsigned)g_hotSat,
+  LOG("[storm] palette hue=%u/%u sat=%u/%u -> cool #%02X%02X%02X hot #%02X%02X%02X\n",
+      (unsigned)g_hue, (unsigned)g_hotHue, (unsigned)g_sat, (unsigned)g_hotSat,
       coolC.r, coolC.g, coolC.b, hotC.r, hotC.g, hotC.b);
   LOG("[storm] frame buffer %u B, strike pool %u B, segment table %u B\n\n",
       (unsigned)sizeof(leds), (unsigned)sizeof(strikes), (unsigned)sizeof(SEGMENTS));

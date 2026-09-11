@@ -478,7 +478,7 @@ function hsv2rgb_rainbow(hue, sat, val){
 let coolC = [40, 110, 255], hotC = [255, 255, 255];
 function resolvePalette(){
   coolC = hsv2rgb_rainbow(P.hue, P.sat, 255);
-  hotC  = hsv2rgb_rainbow(P.hue, P.hotSat, 255);
+  hotC  = hsv2rgb_rainbow(P.hotHue, P.hotSat, 255);
 }
 
 let rand16seed = 0x1337;
@@ -529,6 +529,7 @@ const SPEC = [
   ['gCloud','rumble',     'Rumble depth',    0,  180, 1, ''],
 
   ['gColour','hue',    'Hue',            0, 255, 1, ''],
+  ['gColour','hotHue', 'Peak hue',       0, 255, 1, ''],
   ['gColour','sat',    'Afterglow sat',  0, 255, 1, ''],
   ['gColour','hotSat', 'Peak sat',       0, 120, 1, ''],
   ['gColour','trim',   'Palette trim',  40, 255, 1, ''],
@@ -544,19 +545,24 @@ const P = {
   rgapMin:30, rgapMax:140, partial:110, glowMs:330,
   forkDim:185, forkFollow:140,
   ambLevel:34, ambSpeed:14, cloudFlash:205, cloudSpread:150, cloudMs:540, rumble:70,
-  master:210, hue:160, sat:200, hotSat:40, trim:255, dotSize:12, bloom:80,
+  master:210, hue:160, hotHue:160, sat:200, hotSat:40, trim:255, dotSize:12, bloom:80,
 };
 
 /* Hue lives in the afterglow: HOT_SAT stays low so the return stroke keeps a
    white core and still reads as hot. TRIM compensates for the eye rather than
    the LED — green sits at the peak of luminous sensitivity, so a green flash
-   at master 170 feels about twice as bright as blue at 170. */
+   at master 170 feels about twice as bright as blue at 170.
+
+   The ramp shifts HUE too, which matters for warm palettes. Desaturating adds
+   green and blue equally: from blue that gives blue-white and reads as hot,
+   but from red it gives PINK, since nothing gets hot by going pink. Fire runs
+   red → orange → yellow → white, so red planet cools from an amber core. */
 const PALETTES = {
-  'Storm':      { hue:160, sat:200, hotSat:40, trim:255 },
-  'Tornado':    { hue: 80, sat:165, hotSat:30, trim:200 },
-  'Voldemort':  { hue: 96, sat:220, hotSat:45, trim:190 },
-  'Halloween':  { hue:192, sat:205, hotSat:55, trim:235 },
-  'Red planet': { hue:  8, sat:235, hotSat:60, trim:245 },
+  'Storm':      { hue:160, hotHue:160, sat:200, hotSat:40, trim:255 },
+  'Tornado':    { hue: 80, hotHue: 64, sat:165, hotSat:30, trim:200 },
+  'Voldemort':  { hue: 96, hotHue: 96, sat:220, hotSat:45, trim:190 },
+  'Halloween':  { hue:192, hotHue:192, sat:205, hotSat:55, trim:235 },
+  'Red planet': { hue:  4, hotHue: 32, sat:235, hotSat:70, trim:245 },
 };
 
 const PRESETS = {
@@ -1213,7 +1219,7 @@ function onParamChange(){ paintSwatches(); buildExport(); save(); }
 
 function paintSwatches(){
   const cool = hsv2rgb_rainbow(P.hue, P.sat, 255);
-  const hot  = hsv2rgb_rainbow(P.hue, P.hotSat, 255);
+  const hot  = hsv2rgb_rainbow(P.hotHue, P.hotSat, 255);
   const hex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
   const set = (id, c, lbl) => {
     const node = document.getElementById(id);
@@ -1819,6 +1825,7 @@ void controlsUpdate(bool force) {
   if (force || pal != g_palette) {
     g_palette = pal;
     g_hue    = PALETTES[pal].hue;
+    g_hotHue = PALETTES[pal].hotHue;
     g_sat    = PALETTES[pal].sat;
     g_hotSat = PALETTES[pal].hotSat;
     g_trim   = PALETTES[pal].trim;
@@ -1919,19 +1926,27 @@ const FILE_CONFIG_H = `/* ──────────────────
    is near white — that white core is what makes the eye read "hot". A
    fully saturated stroke reads as a coloured tube light instead.
 
+   The heat ramp shifts HUE as well as saturation, which matters most for
+   warm palettes. Desaturating toward white adds green and blue equally:
+   from blue that gives blue-white and reads as hot, but from red it gives
+   PINK, because nothing in nature gets hot by going pink. Fire runs red to
+   orange to yellow to white. So hotHue lets the peak sit at a different
+   hue from the afterglow — red cooling from an amber core, rather than a
+   salmon one. Leave hotHue equal to hue where no shift is wanted.
+
    TRIM compensates for the eye, not the LED. Green sits at the peak of
    human luminous sensitivity, so a green flash at MASTER 170 feels
    roughly twice as bright as blue at 170. Pull greens back. */
-struct Palette { const char *name; uint8_t hue, sat, hotSat, trim; };
+struct Palette { const char *name; uint8_t hue, hotHue, sat, hotSat, trim; };
 
 __attribute__((unused))
 const Palette PALETTES[] = {
-  //  name           hue  sat  hotSat  trim
-  { "storm",         160, 200,    40,   255 },  // cold blue-white, where this started
-  { "tornado",        80, 165,    30,   200 },  // sickly yellow-green; the dread is in the LOW saturation
-  { "voldemort",      96, 220,    45,   190 },  // vivid unnatural green — menace rather than dread
-  { "halloween",     192, 205,    55,   235 },  // purple
-  { "red planet",      8, 235,    60,   245 },  // mars dust
+  //  name           hue  hotHue  sat  hotSat  trim
+  { "storm",         160,   160,  200,    40,   255 },  // cold blue-white, where this started
+  { "tornado",        80,    64,  165,    30,   200 },  // sickly yellow-green; dread is in the LOW saturation
+  { "voldemort",      96,    96,  220,    45,   190 },  // vivid unnatural green — menace rather than dread
+  { "halloween",     192,   192,  205,    55,   235 },  // purple
+  { "red planet",      4,    32,  235,    70,   245 },  // deep red cooling from an amber core, not a pink one
 };
 #define NUM_PALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
 `;
@@ -1964,6 +1979,7 @@ CRGB coolC, hotC;
 
 uint8_t  g_hue    = HUE;
 uint8_t  g_sat    = SAT;
+uint8_t  g_hotHue = HOT_HUE;
 uint8_t  g_hotSat = HOT_SAT;
 uint8_t  g_bright = 0;                 // resolved in setup()
 uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
@@ -1982,7 +1998,7 @@ uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
 void updatePalette() {
   hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
-  hsv2rgb_rainbow(CHSV(g_hue, g_hotSat, 255), hotC);
+  hsv2rgb_rainbow(CHSV(g_hotHue, g_hotSat, 255), hotC);
 }
 
 /* ── clock ──────────────────────────────────────────────────── */
@@ -2318,8 +2334,8 @@ void logBoot() {
           (unsigned)sg.len, "fork", pa.name, (unsigned)(sg.forkAt * 100 / 255));
     }
   }
-  LOG("[storm] palette hue=%u sat=%u hotSat=%u -> cool #%02X%02X%02X hot #%02X%02X%02X\\n",
-      (unsigned)g_hue, (unsigned)g_sat, (unsigned)g_hotSat,
+  LOG("[storm] palette hue=%u/%u sat=%u/%u -> cool #%02X%02X%02X hot #%02X%02X%02X\\n",
+      (unsigned)g_hue, (unsigned)g_hotHue, (unsigned)g_sat, (unsigned)g_hotSat,
       coolC.r, coolC.g, coolC.b, hotC.r, hotC.g, hotC.b);
   LOG("[storm] frame buffer %u B, strike pool %u B, segment table %u B\\n\\n",
       (unsigned)sizeof(leds), (unsigned)sizeof(strikes), (unsigned)sizeof(SEGMENTS));
@@ -2462,10 +2478,14 @@ ${d('MASTER', P.master)}
    return stroke near white so it still reads as hot, and the pixel cools
    toward the fully saturated HUE as it fades. Push HOT_SAT up and it stops
    looking like lightning and starts looking like a coloured tube.
+   HOT_HUE shifts the peak's hue as well, which warm palettes need:
+   desaturating red gives pink, but fire runs red to orange to white, so a
+   red palette wants an amber core rather than a salmon one.
    TRIM scales MASTER per palette — green sits where the eye is most
    sensitive, so it needs pulling back relative to blue.
    See PALETTES[] in config.h for starting points. */
 ${d('HUE', P.hue)}      // FastLED hue: 0 red, 64 yellow, 96 green, 160 blue, 192 purple
+${d('HOT_HUE', P.hotHue)}      // peak hue; equal to HUE means no shift along the heat ramp
 ${d('SAT', P.sat)}
 ${d('HOT_SAT', P.hotSat)}
 ${d('TRIM', P.trim)}

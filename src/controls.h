@@ -324,6 +324,7 @@ void controlsUpdate(bool force) {
   if (force || pal != g_palette) {
     g_palette = pal;
     g_hue    = PALETTES[pal].hue;
+    g_hotHue = PALETTES[pal].hotHue;
     g_sat    = PALETTES[pal].sat;
     g_hotSat = PALETTES[pal].hotSat;
     g_trim   = PALETTES[pal].trim;

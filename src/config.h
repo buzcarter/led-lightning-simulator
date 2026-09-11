@@ -59,18 +59,26 @@
    is near white — that white core is what makes the eye read "hot". A
    fully saturated stroke reads as a coloured tube light instead.
 
+   The heat ramp shifts HUE as well as saturation, which matters most for
+   warm palettes. Desaturating toward white adds green and blue equally:
+   from blue that gives blue-white and reads as hot, but from red it gives
+   PINK, because nothing in nature gets hot by going pink. Fire runs red to
+   orange to yellow to white. So hotHue lets the peak sit at a different
+   hue from the afterglow — red cooling from an amber core, rather than a
+   salmon one. Leave hotHue equal to hue where no shift is wanted.
+
    TRIM compensates for the eye, not the LED. Green sits at the peak of
    human luminous sensitivity, so a green flash at MASTER 170 feels
    roughly twice as bright as blue at 170. Pull greens back. */
-struct Palette { const char *name; uint8_t hue, sat, hotSat, trim; };
+struct Palette { const char *name; uint8_t hue, hotHue, sat, hotSat, trim; };
 
 __attribute__((unused))
 const Palette PALETTES[] = {
-  //  name           hue  sat  hotSat  trim
-  { "storm",         160, 200,    40,   255 },  // cold blue-white, where this started
-  { "tornado",        80, 165,    30,   200 },  // sickly yellow-green; the dread is in the LOW saturation
-  { "voldemort",      96, 220,    45,   190 },  // vivid unnatural green — menace rather than dread
-  { "halloween",     192, 205,    55,   235 },  // purple
-  { "red planet",      8, 235,    60,   245 },  // mars dust
+  //  name           hue  hotHue  sat  hotSat  trim
+  { "storm",         160,   160,  200,    40,   255 },  // cold blue-white, where this started
+  { "tornado",        80,    64,  165,    30,   200 },  // sickly yellow-green; dread is in the LOW saturation
+  { "voldemort",      96,    96,  220,    45,   190 },  // vivid unnatural green — menace rather than dread
+  { "halloween",     192,   192,  205,    55,   235 },  // purple
+  { "red planet",      4,    32,  235,    70,   245 },  // deep red cooling from an amber core, not a pink one
 };
 #define NUM_PALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
