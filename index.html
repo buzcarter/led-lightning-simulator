@@ -228,6 +228,12 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--volt);box-shadow:
 input[type=range]:hover::-moz-range-thumb{background:var(--volt)}
 
 .presets{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:13px}
+.ramp{display:flex;align-items:center;gap:8px;margin:0 0 13px}
+.ramp .sw{width:22px;height:22px;border-radius:3px;border:1px solid var(--line);flex:none}
+.ramp .rampline{flex:1;height:3px;border-radius:2px;
+  background:linear-gradient(90deg,var(--ink),var(--volt-deep))}
+.ramp .ramplbl{font-family:var(--mono);font-size:9.5px;color:var(--faint);
+  letter-spacing:.07em;text-transform:uppercase}
 .presets .btn{padding:4px 9px;font-size:11px}
 
 .toggle{display:flex;align-items:center;gap:8px;margin-bottom:11px}
@@ -319,6 +325,7 @@ textarea.paste{
         <div class="exp-acts">
           <button class="btn tiny" id="addCloud">+ cloud run</button>
           <button class="btn tiny" id="addBolt">+ bolt</button>
+          <button class="btn tiny" id="addFork">+ fork</button>
           <button class="btn tiny" id="resetLayout">Reset layout</button>
         </div>
         <textarea class="paste" id="dPaste" placeholder="Paste an SVG path d= for the selected run (viewBox 1000×760)…" spellcheck="false"></textarea>
@@ -343,6 +350,20 @@ textarea.paste{
       <div class="body"><div class="grid" id="gCloud"></div></div>
     </details>
 
+    <details open>
+      <summary>Colour <span class="note">exported</span></summary>
+      <div class="body">
+        <div class="presets" id="palettes"></div>
+        <div class="ramp">
+          <span class="sw" id="swHot"></span>
+          <span class="rampline"></span>
+          <span class="sw" id="swCool"></span>
+          <span class="ramplbl">peak → afterglow</span>
+        </div>
+        <div class="grid" id="gColour"></div>
+      </div>
+    </details>
+
     <details>
       <summary>Optics <span class="note">preview only</span></summary>
       <div class="body">
@@ -354,11 +375,8 @@ textarea.paste{
     <details>
       <summary>Export <span class="note">Arduino / FastLED</span></summary>
       <div class="body">
-        <p class="blurb">The sketch below is a direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same envelope. 300 px needs an ESP32, Teensy or RP2040; an AVR Nano runs out of RAM.</p>
-        <div class="tabs">
-          <button class="btn on" data-tab="ino">StormCloud.ino</button>
-          <button class="btn" data-tab="json">layout.json</button>
-        </div>
+        <p class="blurb">A direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same <code>hsv2rgb_rainbow</code>. Drop these in <code>src/</code>. <code>config.h</code> and <code>controls.h</code> are yours to keep: the other four are overwritten every export.</p>
+        <div class="tabs" id="tabs"></div>
         <pre class="code" id="codeOut"></pre>
         <div class="exp-acts">
           <button class="btn tiny" id="copyCode">Copy</button>
@@ -404,6 +422,64 @@ const scale8 = (i, s) => ((i * s) >> 8) & 0xFF;
 const qadd8  = (a, b) => Math.min(255, a + b);
 const qsub8  = (a, b) => Math.max(0, a - b);
 const mix8   = (a, b, amt) => (a + (((b - a) * amt) >> 8)) & 0xFF;
+const scale8_video = (i, s) => (((i * s) >> 8) + ((i && s) ? 1 : 0)) & 0xFF;
+
+/* hsv2rgb_rainbow, transcribed from FastLED. Called twice per frame rather
+   than per pixel, so the cost is irrelevant and the preview lands on the
+   same RGB the hardware will. */
+function hsv2rgb_rainbow(hue, sat, val){
+  hue &= 0xFF;
+  const offset8 = (hue & 0x1F) << 3;
+  const third = scale8(offset8, 85);            // 256/3
+  let r, g, b, tt;
+  if (!(hue & 0x80)){
+    if (!(hue & 0x40)){
+      if (!(hue & 0x20)){ r = 255 - third;      g = third;       b = 0; }
+      else              { r = 171;              g = 85 + third;  b = 0; }
+    } else {
+      if (!(hue & 0x20)){ tt = scale8(offset8, 170);
+                          r = 171 - tt;         g = 170 + third; b = 0; }
+      else              { r = 0;                g = 255 - third; b = third; }
+    }
+  } else {
+    if (!(hue & 0x40)){
+      if (!(hue & 0x20)){ tt = scale8(offset8, 170);
+                          r = 0;                g = 171 - tt;    b = 85 + tt; }
+      else              { r = third;            g = 0;           b = 255 - third; }
+    } else {
+      if (!(hue & 0x20)){ r = 85 + third;       g = 0;           b = 171 - third; }
+      else              { r = 170 + third;      g = 0;           b = 85 - third; }
+    }
+  }
+  if (sat !== 255){
+    if (sat === 0){ r = 255; g = 255; b = 255; }
+    else {
+      const desat = scale8_video(255 - sat, 255 - sat);
+      const satscale = 255 - desat;
+      if (r) r = scale8(r, satscale) + 1;
+      if (g) g = scale8(g, satscale) + 1;
+      if (b) b = scale8(b, satscale) + 1;
+      r += desat; g += desat; b += desat;
+    }
+  }
+  if (val !== 255){
+    const v = scale8_video(val, val);
+    if (v === 0){ r = 0; g = 0; b = 0; }
+    else {
+      if (r) r = scale8(r, v) + 1;
+      if (g) g = scale8(g, v) + 1;
+      if (b) b = scale8(b, v) + 1;
+    }
+  }
+  return [r & 0xFF, g & 0xFF, b & 0xFF];
+}
+
+/* Both ends of the heat ramp, resolved once per frame. */
+let coolC = [40, 110, 255], hotC = [255, 255, 255];
+function resolvePalette(){
+  coolC = hsv2rgb_rainbow(P.hue, P.sat, 255);
+  hotC  = hsv2rgb_rainbow(P.hotHue, P.hotSat, 255);
+}
 
 let rand16seed = 0x1337;
 function random16(){ rand16seed = (Math.imul(rand16seed, 2053) + 13849) & 0xFFFF; return rand16seed; }
@@ -441,6 +517,8 @@ const SPEC = [
   ['gBolt','rgapMin', 'Restrike near', 10,  400, 5, 'ms'],
   ['gBolt','rgapMax', 'Restrike far',  10,  400, 5, 'ms'],
   ['gBolt','partial', 'Partial restrike', 0, 255, 1, ''],
+  ['gBolt','forkDim',   'Fork brightness',40, 255, 1, ''],
+  ['gBolt','forkFollow','Fork restrike',   0, 255, 1, ''],
   ['gBolt','glowMs',  'Afterglow',     40, 1200,10, 'ms'],
 
   ['gCloud','ambLevel',   'Ambient level',   0,  140, 1, ''],
@@ -450,8 +528,12 @@ const SPEC = [
   ['gCloud','cloudMs',    'Cloud decay',   80, 2000,20, 'ms'],
   ['gCloud','rumble',     'Rumble depth',    0,  180, 1, ''],
 
-  ['gLook','master','Master brightness', 8, 255, 1, ''],
-  ['gLook','tint',  'Cool tint',         0, 255, 1, ''],
+  ['gColour','hue',    'Hue',            0, 255, 1, ''],
+  ['gColour','hotHue', 'Peak hue',       0, 255, 1, ''],
+  ['gColour','sat',    'Afterglow sat',  0, 255, 1, ''],
+  ['gColour','hotSat', 'Peak sat',       0, 120, 1, ''],
+  ['gColour','trim',   'Palette trim',  40, 255, 1, ''],
+  ['gColour','master', 'Master bright',  8, 255, 1, ''],
   ['gLook','dotSize','Dot size',         4,  46, 1, 'px'],
   ['gLook','bloom', 'Bloom',             0, 200, 1, '%'],
 ];
@@ -461,23 +543,41 @@ const P = {
   leadMin:22, leadMax:88, trail:7, taper:70,
   strkMin:1, strkMax:4, durMin:12, durMax:46,
   rgapMin:30, rgapMax:140, partial:110, glowMs:330,
+  forkDim:185, forkFollow:140,
   ambLevel:34, ambSpeed:14, cloudFlash:205, cloudSpread:150, cloudMs:540, rumble:70,
-  master:210, tint:150, dotSize:12, bloom:80,
+  master:210, hue:160, hotHue:160, sat:200, hotSat:40, trim:255, dotSize:12, bloom:80,
+};
+
+/* Hue lives in the afterglow: HOT_SAT stays low so the return stroke keeps a
+   white core and still reads as hot. TRIM compensates for the eye rather than
+   the LED — green sits at the peak of luminous sensitivity, so a green flash
+   at master 170 feels about twice as bright as blue at 170.
+
+   The ramp shifts HUE too, which matters for warm palettes. Desaturating adds
+   green and blue equally: from blue that gives blue-white and reads as hot,
+   but from red it gives PINK, since nothing gets hot by going pink. Fire runs
+   red → orange → yellow → white, so red planet cools from an amber core. */
+const PALETTES = {
+  'Storm':      { hue:160, hotHue:160, sat:200, hotSat:40, trim:255 },
+  'Tornado':    { hue: 80, hotHue: 64, sat:165, hotSat:30, trim:200 },
+  'Voldemort':  { hue: 96, hotHue: 96, sat:220, hotSat:45, trim:190 },
+  'Halloween':  { hue:192, hotHue:192, sat:205, hotSat:55, trim:235 },
+  'Red planet': { hue:  4, hotHue: 32, sat:235, hotSat:70, trim:245 },
 };
 
 const PRESETS = {
-  'Distant storm': { gapMin:2600, gapMax:8000, leadMin:60, leadMax:200, trail:14, strkMin:1, strkMax:2,
+  'Distant storm': { forkDim:150, forkFollow:90, gapMin:2600, gapMax:8000, leadMin:60, leadMax:200, trail:14, strkMin:1, strkMax:2,
                      durMin:20, durMax:60, glowMs:520, cloudFlash:150, cloudSpread:190, cloudMs:900,
-                     ambLevel:22, master:150, tint:200, partial:60, rumble:110 },
-  'Rolling':       { gapMin:900, gapMax:4200, leadMin:22, leadMax:88, trail:7, strkMin:1, strkMax:4,
+                     ambLevel:22, master:150, partial:60, rumble:110 },
+  'Rolling':       { forkDim:185, forkFollow:140, gapMin:900, gapMax:4200, leadMin:22, leadMax:88, trail:7, strkMin:1, strkMax:4,
                      durMin:12, durMax:46, glowMs:330, cloudFlash:205, cloudSpread:150, cloudMs:540,
-                     ambLevel:34, master:210, tint:150, partial:110, rumble:70 },
-  'Direct hit':    { gapMin:280, gapMax:1500, leadMin:8, leadMax:26, trail:4, strkMin:2, strkMax:6,
+                     ambLevel:34, master:210, partial:110, rumble:70 },
+  'Direct hit':    { forkDim:220, forkFollow:200, gapMin:280, gapMax:1500, leadMin:8, leadMax:26, trail:4, strkMin:2, strkMax:6,
                      durMin:8, durMax:30, rgapMin:16, rgapMax:70, glowMs:200, cloudFlash:255,
-                     cloudSpread:60, cloudMs:300, ambLevel:44, master:255, tint:60, partial:190, rumble:30 },
-  'Heat lightning':{ gapMin:1400, gapMax:5200, leadMin:120, leadMax:240, trail:34, strkMin:1, strkMax:1,
+                     cloudSpread:60, cloudMs:300, ambLevel:44, master:255, partial:190, rumble:30 },
+  'Heat lightning':{ forkDim:120, forkFollow:40, gapMin:1400, gapMax:5200, leadMin:120, leadMax:240, trail:34, strkMin:1, strkMax:1,
                      durMin:60, durMax:150, glowMs:700, cloudFlash:255, cloudSpread:230, cloudMs:1300,
-                     ambLevel:52, master:170, tint:225, partial:0, rumble:150 },
+                     ambLevel:52, master:170, partial:0, rumble:150 },
 };
 
 /* ── layout ──────────────────────────────────────────────────────── */
@@ -488,19 +588,28 @@ const CLOUD_SIL = "M 178 336 C 96 336 58 278 92 228 C 46 174 96 108 172 120 C 19
 
 function defaultRuns(){
   return [
-    { id:'r0', name:'Cloud body', role:'cloud', count:150, smooth:true, d:null, pts:[
+    { id:'r0', name:'Cloud body', role:'cloud', count:132, smooth:true, parent:null, forkAt:128, d:null, pts:[
       [140,272],[200,214],[282,178],[372,166],[462,148],[552,140],[642,150],[722,176],[792,214],
       [806,252],[730,264],[640,248],[544,238],[450,246],[354,236],[264,252],[184,264],
       [166,298],[250,310],[350,300],[456,308],[560,298],[660,302],[746,290],[802,272],
     ]},
-    { id:'r1', name:'Bolt · left', role:'bolt', count:50, smooth:false, d:null, pts:[
+    { id:'r1', name:'Bolt · left', role:'bolt', count:38, smooth:false, parent:null, forkAt:128, d:null, pts:[
       [276,316],[248,374],[292,380],[250,450],[296,456],[238,544],[272,540],[220,634],
     ]},
-    { id:'r2', name:'Bolt · centre', role:'bolt', count:50, smooth:false, d:null, pts:[
+    { id:'r2', name:'Fork · left', role:'bolt', count:18, smooth:false, parent:'r1', forkAt:140, d:null, pts:[
+      [296,456],[340,510],[312,520],[352,590],[330,600],
+    ]},
+    { id:'r3', name:'Bolt · centre', role:'bolt', count:44, smooth:false, parent:null, forkAt:128, d:null, pts:[
       [506,332],[478,394],[528,400],[472,474],[524,480],[462,570],[500,566],[450,668],
     ]},
-    { id:'r3', name:'Bolt · right', role:'bolt', count:50, smooth:false, d:null, pts:[
+    { id:'r4', name:'Fork · centre', role:'bolt', count:22, smooth:false, parent:'r3', forkAt:115, d:null, pts:[
+      [472,474],[420,530],[452,540],[398,610],[428,618],[386,684],
+    ]},
+    { id:'r5', name:'Bolt · right', role:'bolt', count:34, smooth:false, parent:null, forkAt:128, d:null, pts:[
       [712,320],[750,380],[704,388],[762,456],[712,462],[778,552],[734,548],[792,638],
+    ]},
+    { id:'r6', name:'Fork · right', role:'bolt', count:12, smooth:false, parent:'r5', forkAt:102, d:null, pts:[
+      [762,456],[812,510],[786,518],[828,588],
     ]},
   ];
 }
@@ -537,9 +646,43 @@ function ptsToD(pts, smooth){
 }
 const runD = r => r.d || ptsToD(r.pts, r.smooth);
 
+/* Resolve id-based parent links into indices, break any cycle, and snap each
+   fork's first point onto its parent's path — the rope really is attached. */
+function resolveTree(){
+  const byId = new Map();
+  runs.forEach((r, i) => { if (r.id) byId.set(r.id, i); });
+  runs.forEach(r => { r.parentIdx = (r.parent != null && byId.has(r.parent)) ? byId.get(r.parent) : -1; r.children = []; });
+  runs.forEach((r, i) => {                       // walk up; a cycle detaches the run
+    let hops = 0, cur = r.parentIdx;
+    while (cur >= 0 && hops++ < runs.length){
+      if (cur === i){ r.parentIdx = -1; r.parent = null; break; }
+      cur = runs[cur].parentIdx;
+    }
+  });
+  runs.forEach((r, i) => { if (r.parentIdx >= 0 && r.parentIdx !== i) runs[r.parentIdx].children.push(i); });
+  for (const r of runs){
+    if (r.parentIdx < 0 || r.d || !r.pts || !r.pts.length) continue;
+    const par = runs[r.parentIdx];
+    const pd = runD(par);
+    if (!pd) continue;
+    try {
+      mpath.setAttribute('d', pd);
+      const pt = mpath.getPointAtLength(mpath.getTotalLength() * (r.forkAt || 0) / 255);
+      r.pts[0] = [Math.round(pt.x), Math.round(pt.y)];
+    } catch(e){}
+  }
+}
+const rootOf = i => { let hops = 0; while (i >= 0 && runs[i].parentIdx >= 0 && hops++ < 8) i = runs[i].parentIdx; return i; };
+function isDescendant(a, b){          // is a in b's subtree?
+  let hops = 0;
+  while (a >= 0 && hops++ < 8){ if (a === b) return true; a = runs[a].parentIdx; }
+  return false;
+}
+
 function rebuildLayout(){
   let idx = 0;
   ledRun.fill(-1);
+  resolveTree();
   for (let s = 0; s < runs.length; s++){
     const r = runs[s];
     r.start = idx;
@@ -583,7 +726,8 @@ let simTime = 0;
 let nextStrikeAt = 700;
 let storming = true;
 
-function boltRuns(){ return runs.map((r, i) => [r, i]).filter(([r]) => r.role === 'bolt' && r.drawn > 1); }
+// only root channels are struck; forks fire because their parent did
+function boltRuns(){ return runs.map((r, i) => [r, i]).filter(([r]) => r.role === 'bolt' && r.drawn > 1 && r.parentIdx < 0); }
 
 function makeStrike(segIdx, t0){
   const seg = runs[segIdx];
@@ -607,6 +751,10 @@ function makeStrike(segIdx, t0){
   s.glowMs = Math.max(40, P.glowMs + rndR(0, 200) - 80);
   s.cloudMs = Math.max(60, P.cloudMs);
   s.total = s.lastEnd + Math.max(s.glowMs, s.cloudMs);
+  // Which restrikes travel into the forks. Real restrikes often follow only the
+  // main channel, so this is rolled per stroke; the return stroke always forks.
+  s.forkMask = 1;
+  for (let k = 1; k < n; k++) if (random8() < P.forkFollow) s.forkMask |= (1 << k);
   s.ox = seg.nOX; s.oy = seg.nOY;
   s.rumbleSeed = random8();
   return s;
@@ -623,46 +771,70 @@ function triggerStrike(segIdx){
 
 /* channel envelope: 0..255 intensity plus 0..255 "heat" (white ↔ blue) */
 function strikeEnvelope(s, e){
-  let env = 0, heat = 0, upTo = 255;
-  for (const st of s.strokes){
+  let env = 0, heat = 0, upTo = 255, idx = -1;
+  for (let k = 0; k < s.strokes.length; k++){
+    const st = s.strokes[k];
     if (e >= st.at && e < st.at + st.dur){
       const p = ((e - st.at) * 255 / st.dur) | 0;
       const v = scale8(st.b, qsub8(255, scale8(p, 150)));
-      if (v > env){ env = v; heat = 255; upTo = st.upTo; }
+      if (v > env){ env = v; heat = 255; upTo = st.upTo; idx = k; }
     }
   }
   if (e > s.lastEnd){
     const p = Math.min(255, ((e - s.lastEnd) * 255 / s.glowMs) | 0);
     const fall = scale8(scale8(qsub8(255, p), qsub8(255, p)), 150);
-    if (fall > env){ env = fall; heat = qsub8(255, p); upTo = 255; }
+    if (fall > env){ env = fall; heat = qsub8(255, p); upTo = 255; idx = -1; }
   }
-  return { env, heat, upTo };
+  return { env, heat, upTo, idx };   // idx -1 = afterglow, when everything glows
+}
+
+/* One channel of the strike tree. A fork's leader starts when the parent's
+   leader head reaches the attachment point, and runs at the same propagation
+   velocity — so a branch and its trunk reach ground at about the same moment,
+   the way real lightning does. */
+function renderChannel(s, e, segIdx, leaderStart, leaderDur, dim, depth, frame){
+  const seg = runs[segIdx];
+  if (!seg || seg.drawn < 1 || depth > 3) return;
+  const start = seg.start, len = seg.drawn;
+  const cur = s.cur;
+
+  const le = e - leaderStart;
+  if (le >= 0 && le < leaderDur){
+    const head = ((le * len * 256 / leaderDur) | 0) >> 8;
+    for (let i = 0; i <= head && i < len; i++){
+      const b = qsub8(240, (head - i) * P.trail);
+      if (b) addLed(start + i, scale8(b, dim), 200, i, len, frame);
+    }
+  }
+
+  const partake = depth === 0 || cur.idx < 0 || ((s.forkMask >> cur.idx) & 1);
+  if (cur.env > 0 && partake){
+    const lim = Math.min(len, ((len * cur.upTo) >> 8) + 1);
+    for (let i = 0; i < lim; i++){
+      const flick = qsub8(255, hash8(start + i, frame >> 1) >> 3);   // ±12%
+      addLed(start + i, scale8(scale8(cur.env, flick), dim), cur.heat, i, len, frame);
+    }
+  }
+
+  for (const c of seg.children){
+    const cLen = runs[c].drawn;
+    if (cLen < 1) continue;
+    renderChannel(s, e, c,
+      leaderStart + ((leaderDur * (runs[c].forkAt || 0)) >> 8),
+      Math.max(4, (leaderDur * cLen / len) | 0),
+      scale8(dim, P.forkDim), depth + 1, frame);
+  }
 }
 
 function renderStrike(s, now, frame){
   const e = now - s.t0;
   if (e < 0 || e > s.total) return;
   const seg = runs[s.seg];
-  const start = seg.start, len = seg.drawn;
-  if (len < 1) return;
+  if (!seg || seg.drawn < 1) return;
 
-  const { env, heat, upTo } = strikeEnvelope(s, e);
-
-  // --- the channel itself
-  if (e < s.leaderMs){
-    const head = ((e * len * 256 / s.leaderMs) | 0) >> 8;
-    for (let i = 0; i <= head && i < len; i++){
-      const b = qsub8(240, (head - i) * P.trail);
-      if (b) addLed(start + i, b, 200, i, len, frame);
-    }
-  }
-  if (env > 0){
-    const lim = Math.min(len, ((len * upTo) >> 8) + 1);
-    for (let i = 0; i < lim; i++){
-      const flick = qsub8(255, hash8(start + i, frame >> 1) >> 3);   // ±12%
-      addLed(start + i, scale8(env, flick), heat, i, len, frame);
-    }
-  }
+  s.cur = strikeEnvelope(s, e);
+  const { env, heat } = s.cur;
+  renderChannel(s, e, s.seg, 0, s.leaderMs, 255, 0, frame);
 
   // --- the cloud picking it up, by 2-D distance from the bolt's root
   const glowP = e > s.lastEnd ? Math.min(255, ((e - s.lastEnd) * 255 / s.cloudMs) | 0) : 0;
@@ -695,12 +867,10 @@ function addLed(i, bright, heat, pos, len, frame){
     bright = qsub8(bright, scale8(bright, scale8(t, P.taper)));
     if (!bright) return;
   }
-  // cool tint: heat 255 = white hot, heat 0 = the blue afterglow
-  const cr = 255 - scale8(215, P.tint);
-  const cg = 255 - scale8(145, P.tint);
-  const r = scale8(mix8(cr, 255, heat), bright);
-  const g = scale8(mix8(cg, 255, heat), bright);
-  const b = scale8(255, bright);
+  // heat 255 = the white-hot peak, heat 0 = the fully saturated afterglow
+  const r = scale8(mix8(coolC[0], hotC[0], heat), bright);
+  const g = scale8(mix8(coolC[1], hotC[1], heat), bright);
+  const b = scale8(mix8(coolC[2], hotC[2], heat), bright);
   const k = i * 3;
   leds[k]   = qadd8(leds[k], r);
   leds[k+1] = qadd8(leds[k+1], g);
@@ -725,6 +895,7 @@ let frameNo = 0;
 function updateSim(now){
   leds.fill(0);
   frameNo++;
+  resolvePalette();
   renderAmbient(now);
 
   if (storming && now >= nextStrikeAt){
@@ -744,8 +915,9 @@ function updateSim(now){
   for (const s of strikes) renderStrike(s, now, frameNo);
   strikes = strikes.filter(s => now - s.t0 <= s.total + 40);
 
-  if (P.master < 255){
-    for (let i = 0; i < leds.length; i++) leds[i] = scale8(leds[i], P.master);
+  const bright = scale8(P.master, P.trim);      // TRIM pulls back the eye-sensitive hues
+  if (bright < 255){
+    for (let i = 0; i < leds.length; i++) leds[i] = scale8(leds[i], bright);
   }
 }
 
@@ -852,12 +1024,14 @@ function drawHandles(){
   const r = runs[selRun];
   if (!r || r.d) return;
   ctx.globalCompositeOperation = 'source-over';
+  const pinned = r.parentIdx >= 0;
   r.pts.forEach((p, i) => {
     const [x, y] = toScreen(p[0], p[1]);
-    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, TAU);
+    const isAnchor = pinned && i === 0;
+    ctx.beginPath(); ctx.arc(x, y, isAnchor ? 4 : 5.5, 0, TAU);
     ctx.fillStyle = (dragPt === i) ? '#82c8ff' : '#0b0f17';
     ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = '#82c8ff'; ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = isAnchor ? '#f0a94c' : '#82c8ff'; ctx.stroke();
     if (i === 0){
       ctx.fillStyle = '#82c8ff';
       ctx.font = '600 10px "IBM Plex Mono",monospace';
@@ -1015,6 +1189,12 @@ function buildParams(){
     wrap.append(lab, inp);
     groups[g].append(wrap);
   }
+  const pal = document.getElementById('palettes');
+  for (const name of Object.keys(PALETTES)){
+    const b = el('button', 'btn', name);
+    b.addEventListener('click', () => { Object.assign(P, PALETTES[name]); syncParamUI(); onParamChange(); });
+    pal.append(b);
+  }
   const pr = document.getElementById('presets');
   for (const name of Object.keys(PRESETS)){
     const b = el('button', 'btn', name);
@@ -1035,7 +1215,21 @@ function applyPreset(name){
   Object.assign(P, PRESETS[name]);
   syncParamUI(); onParamChange();
 }
-function onParamChange(){ buildExport(); save(); }
+function onParamChange(){ paintSwatches(); buildExport(); save(); }
+
+function paintSwatches(){
+  const cool = hsv2rgb_rainbow(P.hue, P.sat, 255);
+  const hot  = hsv2rgb_rainbow(P.hotHue, P.hotSat, 255);
+  const hex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+  const set = (id, c, lbl) => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    node.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+    node.title = `${lbl}  ${hex(c)}`;
+  };
+  set('swHot',  hot,  'peak');
+  set('swCool', cool, 'afterglow');
+}
 
 /* routing list */
 const runsEl = document.getElementById('runs');
@@ -1053,8 +1247,8 @@ function renderRuns(){
     nm.addEventListener('input', () => { r.name = nm.value; buildExport(); save(); });
     const acts = el('div', 'run-acts');
     if (r.role === 'bolt'){
-      const f = el('button', 'iconbtn fire', '⚡'); f.title = 'Fire this bolt';
-      f.addEventListener('click', e => { e.stopPropagation(); triggerStrike(i); });
+      const f = el('button', 'iconbtn fire', '⚡'); f.title = 'Fire this channel';
+      f.addEventListener('click', e => { e.stopPropagation(); triggerStrike(rootOf(i)); });
       acts.append(f);
     }
     const up = el('button', 'iconbtn', '↑'); up.title = 'Earlier in wiring order';
@@ -1092,6 +1286,38 @@ function renderRuns(){
       meta.append(c);
     }
     row.append(top, meta);
+
+    if (r.role === 'bolt'){
+      const fr = el('div', 'run-meta');
+      fr.append(el('span', null, 'fork of'));
+      const psel = el('select', 'role');
+      psel.setAttribute('aria-label', 'Parent channel');
+      const none = el('option', null, '— root —'); none.value = ''; psel.append(none);
+      runs.forEach((o, j) => {
+        if (j === i || o.role !== 'bolt' || isDescendant(j, i)) return;
+        const op = el('option', null, o.name); op.value = o.id;
+        if (r.parent === o.id) op.selected = true;
+        psel.append(op);
+      });
+      psel.addEventListener('change', () => {
+        r.parent = psel.value || null;
+        strikes = []; rebuildLayout(); renderRuns(); save();
+      });
+      fr.append(psel);
+      if (r.parentIdx >= 0){
+        fr.append(el('span', null, 'at'));
+        const fa = document.createElement('input');
+        fa.type = 'number'; fa.min = 0; fa.max = 100;
+        fa.value = Math.round((r.forkAt || 0) * 100 / 255);
+        fa.setAttribute('aria-label', 'Attachment point along parent');
+        fa.addEventListener('input', () => {
+          r.forkAt = Math.max(0, Math.min(255, Math.round((+fa.value || 0) * 255 / 100)));
+          rebuildLayout(); save();
+        });
+        fr.append(fa, el('span', null, '% down'));
+      }
+      row.append(fr);
+    }
     runsEl.append(row);
   });
   document.getElementById('routeNote').textContent = `${runs.length} runs`;
@@ -1124,6 +1350,7 @@ function nearestHandle(vx, vy){
   const r = runs[selRun]; if (!r || r.d) return -1;
   const tol = 11 / view.s;
   for (let i = 0; i < r.pts.length; i++){
+    if (i === 0 && r.parentIdx >= 0) continue;      // pinned to the parent channel
     if (Math.hypot(r.pts[i][0] - vx, r.pts[i][1] - vy) < tol) return i;
   }
   return -1;
@@ -1148,7 +1375,7 @@ cv.addEventListener('pointerdown', e => {
     const ri = runAt(vx, vy);
     if (ri >= 0){
       selRun = ri; renderRuns(); syncPaste();
-      if (runs[ri].role === 'bolt') triggerStrike(ri);
+      if (runs[ri].role === 'bolt') triggerStrike(rootOf(ri));
     }
   }
 });
@@ -1210,34 +1437,50 @@ addEventListener('keydown', e => {
 });
 
 document.getElementById('addCloud').addEventListener('click', () => {
-  runs.push({ id: 'r' + (uid++), name: 'Cloud run ' + runs.length, role: 'cloud', count: 30, smooth: true, d: null,
-    pts: [[250, 200], [420, 190], [590, 205]] });
+  runs.push({ id: 'r' + (uid++), name: 'Cloud run ' + runs.length, role: 'cloud', count: 30, smooth: true,
+    parent: null, forkAt: 128, d: null, pts: [[250, 200], [420, 190], [590, 205]] });
   selRun = runs.length - 1; rebuildLayout(); renderRuns(); syncPaste(); setMode('edit'); save();
 });
 document.getElementById('addBolt').addEventListener('click', () => {
-  runs.push({ id: 'r' + (uid++), name: 'Bolt ' + (runs.filter(r => r.role === 'bolt').length + 1), role: 'bolt', count: 40, smooth: false, d: null,
-    pts: [[420, 330], [392, 400], [440, 408], [396, 490], [438, 498], [388, 590]] });
+  runs.push({ id: 'r' + (uid++), name: 'Bolt ' + (runs.filter(r => r.role === 'bolt' && !r.parent).length + 1), role: 'bolt', count: 40, smooth: false,
+    parent: null, forkAt: 128, d: null, pts: [[420, 330], [392, 400], [440, 408], [396, 490], [438, 498], [388, 590]] });
   selRun = runs.length - 1; rebuildLayout(); renderRuns(); syncPaste(); setMode('edit'); save();
 });
+document.getElementById('addFork').addEventListener('click', () => {
+  let base = selRun;
+  if (!runs[base] || runs[base].role !== 'bolt'){
+    const b = boltRuns(); if (!b.length) return;
+    base = b[0][1];
+  }
+  const par = runs[base];
+  runs.push({ id: 'r' + (uid++), name: 'Fork off ' + par.name, role: 'bolt', count: 16, smooth: false,
+    parent: par.id, forkAt: 128, d: null, pts: [[0,0],[42,58],[14,70],[52,138]] });
+  const f = runs[runs.length - 1];
+  rebuildLayout();                              // snaps pts[0] onto the parent
+  const ax = f.pts[0][0], ay = f.pts[0][1];
+  f.pts = [[ax, ay], [ax + 42, ay + 58], [ax + 14, ay + 70], [ax + 52, ay + 138]];
+  selRun = runs.length - 1;
+  rebuildLayout(); renderRuns(); syncPaste(); setMode('edit'); save();
+});
+
 document.getElementById('resetLayout').addEventListener('click', () => {
   runs = defaultRuns(); selRun = 0; strikes = [];
   rebuildLayout(); renderRuns(); syncPaste(); save();
 });
 
 /* ══ export ══════════════════════════════════════════════════════ */
-let exportTab = 'ino';
-const codeOut = document.getElementById('codeOut');
-document.querySelectorAll('.tabs .btn').forEach(b => {
-  b.addEventListener('click', () => {
-    exportTab = b.dataset.tab;
-    document.querySelectorAll('.tabs .btn').forEach(x => x.classList.toggle('on', x === b));
-    buildExport();
-  });
-});
+/* ── export ──────────────────────────────────────────────────────
+   Five files, split along the line of ownership: layout.h, tuning.h,
+   storm.h and main.cpp are regenerated wholesale, so anything you hand-edit
+   in them is lost on the next export. config.h is emitted here only as a
+   starter — on disk it belongs to you, and the bench never overwrites it. */
+const SEG_NAME_LEN = 20;
+const cName = t => String(t).replace(/[^\x20-\x7E]/g, '-').replace(/["\\]/g, '')
+                            .replace(/\s+/g, ' ').trim().slice(0, SEG_NAME_LEN - 1);
 
 function ident(name, i){
-  const s = name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  return 'SEG_' + (s || 'RUN') + '_' + i;
+  const t = name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return 'SEG_' + (t || 'RUN') + '_' + i;
 }
 function tableU8(arr, n, perLine){
   const out = [];
@@ -1249,88 +1492,529 @@ function tableU8(arr, n, perLine){
 function layoutJSON(){
   return JSON.stringify({
     format: 'bolt-bench/1', numLeds: NUM_LEDS, viewBox: [VB.w, VB.h],
-    runs: runs.map(r => ({ name: r.name, role: r.role, count: r.count, smooth: r.smooth,
+    runs: runs.map(r => ({ id: r.id, name: r.name, role: r.role, count: r.count, smooth: r.smooth,
+                           parent: r.parent || null, forkAt: r.forkAt == null ? 128 : r.forkAt,
                            start: r.start, d: r.d || undefined, pts: r.d ? undefined : r.pts })),
     params: { ...P },
   }, null, 2);
 }
 
-function buildExport(){
-  if (exportTab === 'json'){ codeOut.textContent = layoutJSON(); return; }
-  const segLines = runs.map((r, i) =>
-    `  { ${String(r.start).padStart(3)}, ${String(r.drawn || 0).padStart(3)}, ${r.role === 'bolt' ? 1 : 0}, ` +
-    `${String(r.nOX || 0).padStart(3)}, ${String(r.nOY || 0).padStart(3)} },  // ${r.name}`).join('\n');
-  const defs = runs.map((r, i) => `#define ${ident(r.name, i).padEnd(22)} ${i}`).join('\n');
+const FILE_CONTROLS_H = `/* ─────────────────────────────────────────────────────────────
+   controls.h — YOURS. Bolt Bench never overwrites this file.
 
-  codeOut.textContent = `/* ─────────────────────────────────────────────────────────────
-   StormCloud — generated by Bolt Bench
-   ${runs.length} runs · ${usedLeds}/${NUM_LEDS} pixels allocated
+   Three B10K linear pots on ADC1. POTS_ENABLE 0 compiles the lot out
+   and every value falls back to tuning.h.
 
-   The colour math here is the same uint8 arithmetic the bench
-   previews, and random16() is FastLED's own LCG, so seeding the
-   same value reproduces the storm you tuned.
+   Wiring, per pot: outer leg -> 3V3, other outer leg -> GND, wiper ->
+   the ADC pin, plus 100 nF from wiper to GND at the board end. 3.3 V,
+   NOT 5 V — these pins are not 5 V tolerant. Swap the outer legs to
+   reverse a knob's direction.
 
-   300 px of state needs headroom: ESP32 / Teensy / RP2040.
+   All three knobs are detented. A continuous knob on a noisy 12-bit ADC
+   is the worst of both worlds: never quite still, never repeatable. With
+   detents the hysteresis band is far wider than the noise, so a position
+   holds exactly where you left it.
    ───────────────────────────────────────────────────────────── */
-#include <FastLED.h>
+#pragma once
+#include <Arduino.h>
+#include "storm.h"
 
-#define LED_PIN      6
-#define NUM_LEDS     ${NUM_LEDS}
+#ifndef POTS_ENABLE
+  #define POTS_ENABLE 1
+#endif
+
+/* ADC1 only. ADC2 (GPIO 0/2/4/12-15/25-27) stops working the moment WiFi
+   is enabled, and GPIO2 is the strip anyway. GPIO34 is input-only, which
+   is a feature for an analog input — it cannot be driven by accident. */
+#define POT_PALETTE_PIN  GPIO_NUM_32
+#define POT_SPEED_PIN    GPIO_NUM_33
+#define POT_LEVEL_PIN    GPIO_NUM_34
+
+/* The ESP32 ADC flattens near both rails, so trim a dead zone off each end
+   to make the first and last detent reachable. */
+#define POT_MV_MIN       80
+#define POT_MV_MAX       3140
+
+/* Sampling. One pot per interval, round-robin, so each knob is read every
+   3 x POT_INTERVAL_MS — about 750 ms. Knob positions do not need to be
+   fresh at frame rate, and sampling rarely but thoroughly beats sampling
+   constantly and then filtering: averaging N conversions cuts the noise by
+   sqrt(N), where a filter buys the same quiet only by adding lag.
+
+   32 conversions costs ~3 ms, landing in one frame out of every twenty-six.
+   There is deliberately no smoothing filter now: with this much averaging
+   plus detent hysteresis, an EMA would only add latency. */
+#define POT_INTERVAL_MS  250
+#define POT_OVERSAMPLE   32
+
+/* Speed detents, 8.8 fixed point. Geometric, because equal twists should
+   give equal ratio changes; index 5 is exactly 1.00x. */
+#define SPEED_STEPS   11
+static const uint16_t SPEED_Q8[SPEED_STEPS] = {
+   64,   84,  111,  147,  194,  256,  338,  446,  588,  776, 1024
+/* 0.25x                        1.00x                        4.00x */
+};
+
+/* Brightness at level detent 0. Not zero — a knob position that makes the
+   whole costume look broken is rarely what you want at the end of the
+   travel. Set to 0 to turn it into an off switch. */
+#define POT_LEVEL_FLOOR  20
+
+#define POT_LOG_MS       400
+
+/* ── mood LED ───────────────────────────────────────────────── */
+/* A discrete 4-leg RGB LED on three PWM channels, showing which palette is
+   live. It pulses on every strike and rides up during chaos, so one LED
+   reports mood, activity and fury at a glance.
+
+   Pinout of the usual 5 mm part (the one in the Elegoo starter kit): from the
+   flat side, RED - CATHODE - GREEN - BLUE. The cathode is second and is the
+   longest of the four leads. That is a common CATHODE, so MOOD_COMMON_ANODE
+   stays 0. If yours is an anode part the long leg goes to 3V3 instead and the
+   logic inverts; a multimeter in diode mode settles it -- black probe on the
+   long leg, and if the other three light in turn it is a cathode.
+
+   Resistors: one per colour, between each short leg and its GPIO.
+
+   DO NOT use the 220R-on-all-three that starter-kit lessons specify. That is
+   a 5 V figure. Red drops about 2.0 V, green and blue nearer 2.9 V, so at
+   3.3 V a uniform 220R gives red 5.9 mA, green 1.8 mA and blue 1.4 mA -- red
+   four times the others, and blue looking dead. Size them per colour:
+
+       red      220R      ->  5.9 mA
+       green  39R-68R    ->  9.8 mA at 41R, 5.9 mA at 68R
+       blue   39R-68R    ->  7.3 mA at 41R, 4.4 mA at 68R
+
+   Anything in that range is fine for green and blue -- lower is brighter,
+   and even 39R stays inside both the LED's 20 mA rating and the ESP32's
+   comfortable 12 mA per pin. Red is the exception: it has a whole volt more
+   headroom, so the same small resistor would put it at over 30 mA, past both
+   limits. Red keeps the 220R.
+
+   Get the resistors right first. Only then trim the gains below. */
+#ifndef MOOD_LED_ENABLE
+  #define MOOD_LED_ENABLE 1
+#endif
+#define MOOD_PIN_R        GPIO_NUM_25
+#define MOOD_PIN_G        GPIO_NUM_26
+#define MOOD_PIN_B        GPIO_NUM_13
+#ifndef MOOD_COMMON_ANODE
+  #define MOOD_COMMON_ANODE 0      // 1 if the long leg goes to 3V3
+#endif
+
+#define MOOD_PWM_HZ    4000
+#define MOOD_PWM_BITS  8
+#define MOOD_CH_R      0           // LEDC channels; nothing else here uses them
+#define MOOD_CH_G      1
+#define MOOD_CH_B      2
+
+/* Per-channel trim, set by eye, and only after the resistors are sized. With
+   the values above the three channels draw roughly the same current, so there
+   is no a-priori winner to correct for -- but the eye is far more sensitive to
+   green than to blue, so expect to pull green down rather than push blue up.
+   Show it white and trim whichever channel shouts. */
+#ifndef MOOD_GAIN_R
+  #define MOOD_GAIN_R  255
+#endif
+#ifndef MOOD_GAIN_G
+  #define MOOD_GAIN_G  255
+#endif
+#ifndef MOOD_GAIN_B
+  #define MOOD_GAIN_B  255
+#endif
+
+#define MOOD_IDLE      110         // resting level of the palette colour
+#define MOOD_PULSE_MS  180         // strike flash decay
+
+#if MOOD_LED_ENABLE
+
+/* The LEDC API changed in Arduino-ESP32 3.x: channels went away and the pin
+   itself became the handle. This works either side of that. */
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  #define MOOD_ATTACH(pin, ch)   ledcAttach((pin), MOOD_PWM_HZ, MOOD_PWM_BITS)
+  #define MOOD_SET(pin, ch, d)   ledcWrite((pin), (d))
+#else
+  #define MOOD_ATTACH(pin, ch)   do { ledcSetup((ch), MOOD_PWM_HZ, MOOD_PWM_BITS); \\
+                                      ledcAttachPin((pin), (ch)); } while (0)
+  #define MOOD_SET(pin, ch, d)   ledcWrite((ch), (d))
+#endif
+
+static inline void moodPut(gpio_num_t pin, uint8_t ch, uint8_t v) {
+  MOOD_SET(pin, ch, MOOD_COMMON_ANODE ? (uint8_t)(255 - v) : v);
+}
+
+void moodBegin() {
+  MOOD_ATTACH(MOOD_PIN_R, MOOD_CH_R);
+  MOOD_ATTACH(MOOD_PIN_G, MOOD_CH_G);
+  MOOD_ATTACH(MOOD_PIN_B, MOOD_CH_B);
+  moodPut(MOOD_PIN_R, MOOD_CH_R, 0);
+  moodPut(MOOD_PIN_G, MOOD_CH_G, 0);
+  moodPut(MOOD_PIN_B, MOOD_CH_B, 0);
+  LOG("[mood]  RGB on GPIO%u/%u/%u, common %s\\n",
+      (unsigned)MOOD_PIN_R, (unsigned)MOOD_PIN_G, (unsigned)MOOD_PIN_B,
+      MOOD_COMMON_ANODE ? "anode" : "cathode");
+}
+
+void moodUpdate(uint32_t realNow) {
+  uint8_t lvl = MOOD_IDLE;
+
+  uint32_t since = realNow - g_strikeAt;
+  if (g_strikeAt && since < MOOD_PULSE_MS) {          // brief flash on each strike
+    uint8_t p = (uint8_t)(255 - since * 255 / MOOD_PULSE_MS);
+    lvl = qadd8(lvl, scale8((uint8_t)(255 - MOOD_IDLE), p));
+  }
+  if (g_chaos) lvl = qadd8(lvl, scale8((uint8_t)(255 - lvl), g_chaos));
+
+  // coolC is the saturated palette colour -- the mood itself, not the
+  // near-white peak the strike renders at
+  moodPut(MOOD_PIN_R, MOOD_CH_R, scale8(scale8(coolC.r, lvl), MOOD_GAIN_R));
+  moodPut(MOOD_PIN_G, MOOD_CH_G, scale8(scale8(coolC.g, lvl), MOOD_GAIN_G));
+  moodPut(MOOD_PIN_B, MOOD_CH_B, scale8(scale8(coolC.b, lvl), MOOD_GAIN_B));
+}
+
+#else
+inline void moodBegin() {}
+inline void moodUpdate(uint32_t) {}
+#endif
+
+/* ── chaos button ───────────────────────────────────────────── */
+/* A momentary button to GND on CHAOS_PIN, using the internal pull-up, so it
+   is two wires and no resistor. Do NOT put it on GPIO34-39: those pins have
+   no internal pull-ups and would need an external one.
+
+   A tap has a shape rather than being a flat flash. Every root channel fires
+   at once, staggered so it reads as a cascade instead of one white frame;
+   the scheduler's gaps collapse and every strike doubles for CHAOS_HOLD_MS;
+   then it all eases back to the knobs over CHAOS_DECAY_MS, like the storm
+   moving off. Tapping again restarts it.
+
+   The envelope runs in real milliseconds while the strikes it schedules run
+   on the storm clock — so a tap always lasts about four and a half seconds
+   no matter where the speed knob is. */
+#ifndef CHAOS_ENABLE
+  #define CHAOS_ENABLE 1
+#endif
+#define CHAOS_PIN          GPIO_NUM_27
+#define CHAOS_DEBOUNCE_MS  25
+#define CHAOS_HOLD_MS      2500     // everything at maximum
+#define CHAOS_DECAY_MS     2000     // easing back to the knob positions
+#define CHAOS_STAGGER_MS   90       // between channels in the opening volley
+#define CHAOS_GAP_MIN      90       // scheduler gaps while held
+#define CHAOS_GAP_MAX      260
+
+#if CHAOS_ENABLE
+
+static uint32_t chaosAt = 0;        // millis of the last tap; 0 = idle
+
+static inline uint16_t chaosLerp16(uint16_t base, uint16_t target, uint8_t amt) {
+  return (uint16_t)((int32_t)base + ((int32_t)target - (int32_t)base) * amt / 255);
+}
+
+void chaosFire(uint32_t realNow, uint32_t stormNow) {
+  chaosAt = realNow ? realNow : 1;
+  uint8_t k = 0;
+  for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
+    if (!sg.isBolt || sg.parent >= 0) continue;      // forks come with their parent
+    trigger(i, stormNow + (uint32_t)k * CHAOS_STAGGER_MS);
+    k++;
+  }
+  LOG("[storm] CHAOS -- %u channels\\n", (unsigned)k);
+}
+
+void chaosBegin() {
+  pinMode(CHAOS_PIN, INPUT_PULLUP);
+  LOG("[storm] chaos button GPIO%u to GND\\n", (unsigned)CHAOS_PIN);
+}
+
+void chaosPoll(uint32_t realNow, uint32_t stormNow) {
+  static uint8_t  lastRaw = HIGH, stable = HIGH;
+  static uint32_t changedAt = 0;
+
+  uint8_t raw = digitalRead(CHAOS_PIN);
+  if (raw != lastRaw) { lastRaw = raw; changedAt = realNow; }
+  if (realNow - changedAt >= CHAOS_DEBOUNCE_MS && stable != lastRaw) {
+    stable = lastRaw;
+    if (stable == LOW) chaosFire(realNow, stormNow);   // active low
+  }
+
+  if (!chaosAt) return;
+  uint32_t e = realNow - chaosAt;
+  if (e >= (uint32_t)CHAOS_HOLD_MS + CHAOS_DECAY_MS) {
+    chaosAt = 0; g_chaos = 0;
+    g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
+    FastLED.setBrightness(g_bright);
+    return;
+  }
+  uint8_t amt = 255;
+  if (e > CHAOS_HOLD_MS)
+    amt = (uint8_t)(255 - (uint32_t)(e - CHAOS_HOLD_MS) * 255 / CHAOS_DECAY_MS);
+  g_chaos = amt;
+
+  g_gapMin    = chaosLerp16(GAP_MIN, CHAOS_GAP_MIN, amt);
+  g_gapMax    = chaosLerp16(GAP_MAX, CHAOS_GAP_MAX, amt);
+  g_dblChance = (uint8_t)chaosLerp16(DBL_CHANCE, 255, amt);
+
+  uint8_t ceil8 = scale8(MASTER, g_trim);            // ignore the level knob while it rages
+  uint8_t head  = ceil8 > g_bright ? ceil8 - g_bright : 0;
+  FastLED.setBrightness((uint8_t)(g_bright + scale8(head, amt)));
+}
+
+#else
+inline void chaosBegin() {}
+inline void chaosPoll(uint32_t, uint32_t) {}
+#endif
+
+#if POTS_ENABLE
+
+struct Pot { gpio_num_t pin; uint8_t out; };
+
+static Pot potPalette = { POT_PALETTE_PIN, 0 };
+static Pot potSpeed   = { POT_SPEED_PIN,   0 };
+static Pot potLevel   = { POT_LEVEL_PIN,   0 };
+
+static uint8_t heldPalette = 0, heldSpeed = 0, heldLevel = 0;
+
+static inline void potRead(Pot &p) {
+  uint32_t acc = 0;
+  for (uint8_t i = 0; i < POT_OVERSAMPLE; i++) acc += analogReadMilliVolts(p.pin);
+  int32_t mv = (int32_t)(acc / POT_OVERSAMPLE);
+  if (mv <= POT_MV_MIN)      p.out = 0;
+  else if (mv >= POT_MV_MAX) p.out = 255;
+  else p.out = (uint8_t)(((mv - POT_MV_MIN) * 255) / (POT_MV_MAX - POT_MV_MIN));
+}
+
+/* Snap 0..255 to one of \`steps\` detents, holding the current one until the
+   knob has moved three quarters of a step. Quantising without that is worse
+   than not quantising: park on a boundary and noise flips it forever.
+   At 11 steps the band is ~18 counts against maybe 10 of ADC noise. */
+static inline uint8_t potDetent(uint8_t v, uint8_t steps, uint8_t &held) {
+  if (steps < 2) return 0;
+  uint16_t width  = 255 / (steps - 1);
+  int16_t  centre = (int16_t)((uint16_t)held * 255 / (steps - 1));
+  int16_t  d = (int16_t)v - centre;
+  if (d < 0) d = -d;
+  if (d > (int16_t)(width * 3 / 4))
+    held = (uint8_t)(((uint32_t)v * (steps - 1) + 127) / 255);
+  return held;
+}
+
+void controlsUpdate(bool force) {
+  static uint32_t nextAt = 0;
+  static uint8_t  turn = 0;
+  static uint32_t loggedAt = 0;
+
+  if (force) {
+    potRead(potPalette); potRead(potSpeed); potRead(potLevel);
+  } else {
+    if ((int32_t)(millis() - nextAt) < 0) return;
+    nextAt = millis() + POT_INTERVAL_MS;
+    switch (turn) {
+      case 0:  potRead(potPalette); break;
+      case 1:  potRead(potSpeed);   break;
+      default: potRead(potLevel);   break;
+    }
+    turn = (turn + 1) % 3;
+  }
+
+  /* Palette, not raw hue. Rotating hue alone leaves SAT wherever tuning.h
+     left it — and at a low saturation every hue is the same near-white, so
+     the knob appears dead. Each detent carries a whole look instead. */
+  uint8_t pal = potDetent(potPalette.out, NUM_PALETTES, heldPalette);
+  bool trimChanged = false;
+  if (force || pal != g_palette) {
+    g_palette = pal;
+    g_hue    = PALETTES[pal].hue;
+    g_hotHue = PALETTES[pal].hotHue;
+    g_sat    = PALETTES[pal].sat;
+    g_hotSat = PALETTES[pal].hotSat;
+    g_trim   = PALETTES[pal].trim;
+    updatePalette();
+    trimChanged = true;
+  }
+
+  uint8_t sp = potDetent(potSpeed.out, SPEED_STEPS, heldSpeed);
+  g_speedQ8 = SPEED_Q8[sp];
+
+  g_level = potDetent(potLevel.out, LEVEL_STEPS, heldLevel);
+  uint8_t ceil8 = scale8(MASTER, g_trim);
+  uint8_t span  = ceil8 > POT_LEVEL_FLOOR ? ceil8 - POT_LEVEL_FLOOR : 0;
+  uint8_t b = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
+  if (force || trimChanged || b != g_bright) { g_bright = b; FastLED.setBrightness(b); }
+
+  g_potRaw[0] = potPalette.out;
+  g_potRaw[1] = potSpeed.out;
+  g_potRaw[2] = potLevel.out;
+}
+
+void controlsBegin() {
+  analogReadResolution(12);
+  controlsUpdate(true);
+  LOG("[pots]  palette GPIO%u (%u), speed GPIO%u (%u), level GPIO%u (%u detents)\\n",
+      (unsigned)POT_PALETTE_PIN, (unsigned)NUM_PALETTES,
+      (unsigned)POT_SPEED_PIN,   (unsigned)SPEED_STEPS,
+      (unsigned)POT_LEVEL_PIN,   (unsigned)LEVEL_STEPS);
+  LOG("[pots]  sampled %u at a time, one knob every %u ms\\n",
+      (unsigned)POT_OVERSAMPLE, (unsigned)POT_INTERVAL_MS);
+}
+
+#else   /* POTS_ENABLE == 0 — knobs compiled out, tuning.h rules */
+
+inline void controlsUpdate(bool) {}
+inline void controlsBegin() { LOG("[pots]  disabled\\n"); }
+
+#endif
+`;
+const FILE_CONFIG_H = `/* ─────────────────────────────────────────────────────────────
+   config.h — YOURS. Bolt Bench never overwrites this file.
+
+   Pins, board wiring, logging and palettes live here so that
+   re-exporting from the bench (which replaces layout.h, tuning.h,
+   storm.h and main.cpp wholesale) cannot clobber them.
+   ───────────────────────────────────────────────────────────── */
+#pragma once
+#include <Arduino.h>
+
+/* ── strip ──────────────────────────────────────────────────── */
+/* GPIO2 is a strapping pin, but strapping pins are only sampled at reset —
+   after boot it is an ordinary output, which is why this works. The one
+   risk is something holding it high during reset and blocking boot.
+   If you ever need to move it: GPIO13/18/19/21/22/23/25/26/27/32/33 are
+   all clear. Avoid GPIO6-11 (SPI flash), GPIO34-39 (input only),
+   GPIO1/3 (Serial), GPIO16/17 (PSRAM on WROVER modules). */
+#define LED_PIN      GPIO_NUM_2
 #define LED_TYPE     WS2812B
 #define COLOR_ORDER  GRB
+
+/* How many strikes may overlap, and how many strokes each may have.
+   Exceeding MAX_STRIKES logs a DROPPED line rather than queueing. */
 #define MAX_STRIKES  6
 #define MAX_STROKES  6
 
+/* ── logging ────────────────────────────────────────────────── */
+/* 0 removes Serial, the format strings and the per-frame power
+   measurement entirely — about 28 KB of flash on an ESP32.
+   Override from platformio.ini with -DSTORM_LOG=0. */
+#ifndef STORM_LOG
+  #define STORM_LOG      1
+#endif
+#ifndef STORM_LOG_BAUD
+  #define STORM_LOG_BAUD 115200
+#endif
+#ifndef STORM_LOG_STATS
+  #define STORM_LOG_STATS 5000    // ms between dashboard refreshes when nothing changes
+#endif
+#ifndef STORM_LOG_MIN_MS
+  #define STORM_LOG_MIN_MS 120    // floor between lines, so a burst cannot flood the port
+#endif
+#ifndef STORM_LOG_RAW
+  #define STORM_LOG_RAW 0         // 1 appends the raw 0..255 pot readings
+#endif
+
+#if STORM_LOG
+  #define LOG(...)  Serial.printf(__VA_ARGS__)
+#else
+  #define LOG(...)  do {} while (0)
+#endif
+
+/* ── palettes ───────────────────────────────────────────────── */
+/* Starting points for HUE / SAT / HOT_SAT / TRIM in tuning.h.
+
+   Two rules learned the hard way:
+
+   Hue belongs in the afterglow. HOT_SAT stays low so the return stroke
+   is near white — that white core is what makes the eye read "hot". A
+   fully saturated stroke reads as a coloured tube light instead.
+
+   The heat ramp shifts HUE as well as saturation, which matters most for
+   warm palettes. Desaturating toward white adds green and blue equally:
+   from blue that gives blue-white and reads as hot, but from red it gives
+   PINK, because nothing in nature gets hot by going pink. Fire runs red to
+   orange to yellow to white. So hotHue lets the peak sit at a different
+   hue from the afterglow — red cooling from an amber core, rather than a
+   salmon one. Leave hotHue equal to hue where no shift is wanted.
+
+   TRIM compensates for the eye, not the LED. Green sits at the peak of
+   human luminous sensitivity, so a green flash at MASTER 170 feels
+   roughly twice as bright as blue at 170. Pull greens back. */
+struct Palette { const char *name; uint8_t hue, hotHue, sat, hotSat, trim; };
+
+__attribute__((unused))
+const Palette PALETTES[] = {
+  //  name           hue  hotHue  sat  hotSat  trim
+  { "storm",         160,   160,  200,    40,   255 },  // cold blue-white, where this started
+  { "tornado",        80,    64,  165,    30,   200 },  // sickly yellow-green; dread is in the LOW saturation
+  { "voldemort",      96,    96,  220,    45,   190 },  // vivid unnatural green — menace rather than dread
+  { "halloween",     192,   192,  205,    55,   235 },  // purple
+  { "red planet",      4,    32,  235,    70,   245 },  // deep red cooling from an amber core, not a pink one
+};
+#define NUM_PALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
+`;
+const FILE_STORM_H = `/* Storm engine, generated by Bolt Bench — overwritten on export. */
+#pragma once
+#include <FastLED.h>
+#include "config.h"
+#include "layout.h"
+#include "tuning.h"
+
 CRGB leds[NUM_LEDS];
 
-/* ── routing ────────────────────────────────────────────────── */
-struct Segment {
-  uint16_t start;
-  uint16_t len;
-  uint8_t  isBolt;
-  uint8_t  ox, oy;      // channel root, normalised 0..255
-};
+/* ── palette ────────────────────────────────────────────────── */
+/* Both endpoints of the heat ramp, resolved once per frame rather than
+   per pixel, so addLed() stays three mix8 and three scale8. */
+CRGB coolC, hotC;
 
-${defs}
-#define NUM_SEGMENTS ${runs.length}
+/* Runtime copies of the tuning.h values, seeded from them at boot. Anything
+   a knob can move has to live in RAM rather than as a #define; everything
+   else stays a compile-time constant. Silent — updatePalette() is called on
+   every hue change, so logging here would flood the port while you turn. */
+/* Level runs in detents rather than continuously: 5% increments over
+   0..100% is 11 stops at 10% each (0, 10, 20 ... 100). Fewer detents means
+   a wider hysteresis band — at 11 steps that is ~18 ADC counts against
+   maybe 10 of noise, so a position holds where you leave it. Both
+   brightness now and storm severity later read g_level, so they share one
+   set of detents. */
+#define LEVEL_STEPS   11
+#define LEVEL_PERCENT(i)  ((uint16_t)(i) * 100 / (LEVEL_STEPS - 1))
 
-const Segment SEGMENTS[NUM_SEGMENTS] PROGMEM = {
-${segLines}
-};
+uint8_t  g_hue    = HUE;
+uint8_t  g_sat    = SAT;
+uint8_t  g_hotHue = HOT_HUE;
+uint8_t  g_hotSat = HOT_SAT;
+uint8_t  g_bright = 0;                 // resolved in setup()
+uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
+uint8_t  g_trim   = TRIM;              // brightness trim of the live palette
+uint8_t  g_palette = 0;                // index into PALETTES[] in config.h
+uint8_t  g_potRaw[3] = {0, 0, 0};      // palette/speed/level, 0..255, for STORM_LOG_RAW
 
-// pixel positions, normalised 0..255 across the long axis
-const uint8_t LED_X[NUM_LEDS] PROGMEM = {
-${tableU8(nrmX, NUM_LEDS, 20)}
-};
-const uint8_t LED_Y[NUM_LEDS] PROGMEM = {
-${tableU8(nrmY, NUM_LEDS, 20)}
-};
+/* Scheduler settings the chaos button borrows for a few seconds. Seeded from
+   tuning.h; the severity crossfade will drive these too when it lands. */
+uint16_t g_gapMin    = GAP_MIN;
+uint16_t g_gapMax    = GAP_MAX;
+uint8_t  g_dblChance = DBL_CHANCE;
+uint8_t  g_chaos     = 0;              // 0..255, position in the chaos envelope
+uint32_t g_strikeAt  = 0;              // millis of the last strike, for the mood LED
+uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 
-/* ── tuning ─────────────────────────────────────────────────── */
-#define GAP_MIN       ${P.gapMin}
-#define GAP_MAX       ${P.gapMax}
-#define DBL_CHANCE    ${P.dblChance}
-#define CLUSTER_MS    ${P.clusterMs}
-#define LEAD_MIN      ${Math.min(P.leadMin, P.leadMax)}
-#define LEAD_MAX      ${Math.max(P.leadMin, P.leadMax)}
-#define TRAIL         ${P.trail}
-#define TAPER         ${P.taper}
-#define STRK_MIN      ${Math.min(P.strkMin, P.strkMax)}
-#define STRK_MAX      ${Math.max(P.strkMin, P.strkMax)}
-#define DUR_MIN       ${Math.min(P.durMin, P.durMax)}
-#define DUR_MAX       ${Math.max(P.durMin, P.durMax)}
-#define RGAP_MIN      ${Math.min(P.rgapMin, P.rgapMax)}
-#define RGAP_MAX      ${Math.max(P.rgapMin, P.rgapMax)}
-#define PARTIAL       ${P.partial}
-#define GLOW_MS       ${P.glowMs}
-#define AMB_LEVEL     ${P.ambLevel}
-#define AMB_SPEED     ${P.ambSpeed}
-#define CLOUD_FLASH   ${P.cloudFlash}
-#define CLOUD_SPREAD  ${P.cloudSpread}
-#define CLOUD_MS      ${P.cloudMs}
-#define RUMBLE        ${P.rumble}
-#define MASTER        ${P.master}
-#define TINT          ${P.tint}
+void updatePalette() {
+  hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
+  hsv2rgb_rainbow(CHSV(g_hotHue, g_hotSat, 255), hotC);
+}
+
+/* ── clock ──────────────────────────────────────────────────── */
+/* A virtual clock, not scaled millis(). Scaling millis() directly would
+   teleport every strike in flight the instant the speed knob moved; this
+   accumulates instead, so a speed change is smooth. It is the same thing
+   the bench does with simTime += dt * speed. */
+uint32_t stormClock() {
+  static uint32_t vClock = 0, lastReal = 0;
+  uint32_t real = millis();
+  uint32_t dt = real - lastReal;
+  lastReal = real;
+  if (dt > 100) dt = 100;              // never fast-forward through a stall
+  vClock += ((uint32_t)dt * g_speedQ8) >> 8;
+  return vClock;
+}
 
 /* ── helpers ────────────────────────────────────────────────── */
 static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t amt) {
@@ -1365,6 +2049,7 @@ struct Strike {
   uint16_t glowMs;
   uint16_t total;
   uint8_t  ox, oy;
+  uint8_t  forkMask;    // bit k set = restrike k travels into the forks
   uint8_t  rumbleSeed;
 };
 Strike strikes[MAX_STRIKES];
@@ -1392,6 +2077,9 @@ void makeStrike(uint8_t slot, uint8_t segIdx, uint32_t t0) {
   uint16_t g = GLOW_MS + rndR(0, 200); g = (g > 80) ? g - 80 : 40;
   s.glowMs = g;
   s.total  = s.lastEnd + (s.glowMs > CLOUD_MS ? s.glowMs : CLOUD_MS);
+  s.forkMask = 1;                       // the return stroke always forks
+  for (uint8_t k = 1; k < s.nStrokes; k++)
+    if (random8() < FORK_FOLLOW) s.forkMask |= (1 << k);
   s.ox = seg.ox; s.oy = seg.oy;
   s.rumbleSeed = random8();
 }
@@ -1402,7 +2090,15 @@ int8_t freeSlot() {
 }
 void trigger(uint8_t segIdx, uint32_t at) {
   int8_t slot = freeSlot();
-  if (slot >= 0) makeStrike(slot, segIdx, at);
+  if (slot < 0) {
+#if STORM_LOG
+    Segment sg; memcpy_P(&sg, &SEGMENTS[segIdx], sizeof(Segment));
+    LOG("[storm] DROPPED %s — all %u strike slots busy\\n", sg.name, (unsigned)MAX_STRIKES);
+#endif
+    return;
+  }
+  makeStrike(slot, segIdx, at);
+  g_strikeAt = millis();
 }
 
 /* ── per-pixel accumulate ───────────────────────────────────── */
@@ -1413,22 +2109,20 @@ void addLed(uint16_t i, uint8_t bright, uint8_t heat, uint16_t pos, uint16_t len
     bright = qsub8(bright, scale8(bright, scale8(t, TAPER)));
     if (!bright) return;
   }
-  uint8_t cr = 255 - scale8(215, TINT);
-  uint8_t cg = 255 - scale8(145, TINT);
-  leds[i].r = qadd8(leds[i].r, scale8(mix8(cr, 255, heat), bright));
-  leds[i].g = qadd8(leds[i].g, scale8(mix8(cg, 255, heat), bright));
-  leds[i].b = qadd8(leds[i].b, bright);
+  leds[i].r = qadd8(leds[i].r, scale8(mix8(coolC.r, hotC.r, heat), bright));
+  leds[i].g = qadd8(leds[i].g, scale8(mix8(coolC.g, hotC.g, heat), bright));
+  leds[i].b = qadd8(leds[i].b, scale8(mix8(coolC.b, hotC.b, heat), bright));
 }
 
 /* ── channel envelope: intensity + heat (white ↔ blue) ──────── */
-void envelope(const Strike &s, uint16_t e, uint8_t &env, uint8_t &heat, uint8_t &upTo) {
-  env = 0; heat = 0; upTo = 255;
+void envelope(const Strike &s, uint16_t e, uint8_t &env, uint8_t &heat, uint8_t &upTo, int8_t &idx) {
+  env = 0; heat = 0; upTo = 255; idx = -1;
   for (uint8_t k = 0; k < s.nStrokes; k++) {
     const Stroke &st = s.strokes[k];
     if (e >= st.at && e < (uint16_t)(st.at + st.dur)) {
       uint8_t p = (uint8_t)((uint32_t)(e - st.at) * 255 / st.dur);
       uint8_t v = scale8(st.b, qsub8(255, scale8(p, 150)));
-      if (v > env) { env = v; heat = 255; upTo = st.upTo; }
+      if (v > env) { env = v; heat = 255; upTo = st.upTo; idx = (int8_t)k; }
     }
   }
   if (e > s.lastEnd) {
@@ -1436,7 +2130,50 @@ void envelope(const Strike &s, uint16_t e, uint8_t &env, uint8_t &heat, uint8_t 
     uint8_t p = q > 255 ? 255 : (uint8_t)q;
     uint8_t inv = qsub8(255, p);
     uint8_t fall = scale8(scale8(inv, inv), 150);
-    if (fall > env) { env = fall; heat = inv; upTo = 255; }
+    if (fall > env) { env = fall; heat = inv; upTo = 255; idx = -1; }  // afterglow: all channels
+  }
+}
+
+/* One channel of the strike tree.
+
+   A fork's leader starts when the parent's leader head reaches the attachment
+   point, and travels at the same propagation velocity (same pixels per ms), so
+   a branch and its trunk arrive at about the same moment — which is what real
+   forked lightning does. Depth is capped at 3. */
+void renderChannel(const Strike &s, uint16_t e, uint8_t segIdx,
+                   uint16_t leaderStart, uint16_t leaderDur, uint8_t dim, uint8_t depth,
+                   uint8_t env, uint8_t heat, uint8_t upTo, int8_t sidx) {
+  if (depth > 3) return;
+  Segment seg; memcpy_P(&seg, &SEGMENTS[segIdx], sizeof(Segment));
+  uint16_t start = seg.start, len = seg.len;
+  if (len < 1) return;
+
+  if (e >= leaderStart && (uint16_t)(e - leaderStart) < leaderDur) {   // stepped leader
+    uint16_t le = e - leaderStart;
+    uint16_t head = (uint16_t)(((uint32_t)le * len) / leaderDur);
+    for (uint16_t i = 0; i <= head && i < len; i++) {
+      uint8_t b = qsub8(240, (uint8_t)((head - i) * TRAIL));
+      if (b) addLed(start + i, scale8(b, dim), 200, i, len);
+    }
+  }
+
+  bool partake = (depth == 0) || (sidx < 0) || ((s.forkMask >> sidx) & 1);
+  if (env && partake) {                                   // return + restrikes
+    uint16_t lim = (uint16_t)(((uint32_t)len * upTo) >> 8) + 1;
+    if (lim > len) lim = len;
+    for (uint16_t i = 0; i < lim; i++) {
+      uint8_t flick = qsub8(255, hash8(start + i, frameNo >> 1) >> 3);
+      addLed(start + i, scale8(scale8(env, flick), dim), heat, i, len);
+    }
+  }
+
+  for (uint8_t c = 0; c < NUM_SEGMENTS; c++) {            // recurse into forks
+    Segment ch; memcpy_P(&ch, &SEGMENTS[c], sizeof(Segment));
+    if (ch.parent != (int8_t)segIdx || ch.len < 1) continue;
+    uint16_t cStart = leaderStart + (uint16_t)(((uint32_t)leaderDur * ch.forkAt) >> 8);
+    uint16_t cDur = (uint16_t)(((uint32_t)leaderDur * ch.len) / len);
+    if (cDur < 4) cDur = 4;
+    renderChannel(s, e, c, cStart, cDur, scale8(dim, FORK_DIM), depth + 1, env, heat, upTo, sidx);
   }
 }
 
@@ -1448,27 +2185,11 @@ void renderStrike(Strike &s, uint32_t now) {
   uint16_t e = (uint16_t)el;
 
   Segment seg; memcpy_P(&seg, &SEGMENTS[s.seg], sizeof(Segment));
-  uint16_t start = seg.start, len = seg.len;
-  if (len < 1) return;
+  if (seg.len < 1) return;
 
-  uint8_t env, heat, upTo;
-  envelope(s, e, env, heat, upTo);
-
-  if (e < s.leaderMs) {                                   // stepped leader
-    uint16_t head = (uint16_t)(((uint32_t)e * len) / s.leaderMs);
-    for (uint16_t i = 0; i <= head && i < len; i++) {
-      uint8_t b = qsub8(240, (uint8_t)((head - i) * TRAIL));
-      if (b) addLed(start + i, b, 200, i, len);
-    }
-  }
-  if (env) {                                              // return + restrikes
-    uint16_t lim = (uint16_t)(((uint32_t)len * upTo) >> 8) + 1;
-    if (lim > len) lim = len;
-    for (uint16_t i = 0; i < lim; i++) {
-      uint8_t flick = qsub8(255, hash8(start + i, frameNo >> 1) >> 3);
-      addLed(start + i, scale8(env, flick), heat, i, len);
-    }
-  }
+  uint8_t env, heat, upTo; int8_t sidx;
+  envelope(s, e, env, heat, upTo, sidx);
+  renderChannel(s, e, s.seg, 0, s.leaderMs, 255, 0, env, heat, upTo, sidx);
 
   // the cloud lights in sympathy, by distance from the channel root
   uint8_t glowP = 0;
@@ -1518,23 +2239,146 @@ void renderAmbient(uint32_t now) {
   }
 }
 
+/* ── dashboard ──────────────────────────────────────────────── */
+/* One line, rewritten when the state a person would notice changes, and
+   refreshed on a slow timer while it does not. Not a log: no scrollback of
+   every strike and every knob nudge, just the current picture. Only DROPPED
+   still prints on its own, because it is a fault rather than a state. */
+void logDashboard(uint32_t realNow) {
+#if STORM_LOG
+  static char     lastLine[128] = "";
+  static uint32_t lastAt = 0, frames = 0, peakmW = 0, fpsAt = 0, fps = 0;
+
+  frames++;
+  uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
+  if (mw > peakmW) peakmW = mw;
+  if (realNow - fpsAt >= 1000) {
+    fps = frames * 1000UL / (realNow - fpsAt ? realNow - fpsAt : 1);
+    frames = 0; fpsAt = realNow;
+  }
+
+  // A strike lights its whole tree, so the root channel is the summary; forks
+  // never fire on their own. Overlapping strikes show as "name +N".
+  char chan[28];
+  uint8_t nActive = 0; int8_t newest = -1; uint32_t newestT = 0;
+  for (uint8_t i = 0; i < MAX_STRIKES; i++) {
+    if (!strikes[i].active) continue;
+    nActive++;
+    if (newest < 0 || strikes[i].t0 >= newestT) { newest = i; newestT = strikes[i].t0; }
+  }
+  if (newest < 0) snprintf(chan, sizeof chan, "_");
+  else {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[strikes[newest].seg], sizeof(Segment));
+    if (nActive > 1) snprintf(chan, sizeof chan, "%s +%u", sg.name, (unsigned)(nActive - 1));
+    else             snprintf(chan, sizeof chan, "%s", sg.name);
+  }
+
+  char mood[22];
+  snprintf(mood, sizeof mood, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
+
+  char sev[8];
+  if (g_chaos) snprintf(sev, sizeof sev, "CHAOS");
+  else         snprintf(sev, sizeof sev, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
+
+  char line[128];
+  snprintf(line, sizeof line,
+           "mood: %-15s rate: %u.%02u  severity: %-5s storm: %-20s",
+           mood, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
+           sev, chan);
+
+  bool changed = strcmp(line, lastLine) != 0;
+  bool due     = (realNow - lastAt) >= STORM_LOG_STATS;
+  if (!((changed && realNow - lastAt >= STORM_LOG_MIN_MS) || due)) return;
+
+  strncpy(lastLine, line, sizeof lastLine - 1);
+  lastLine[sizeof lastLine - 1] = 0;
+  lastAt = realNow;
+
+#if STORM_LOG_RAW
+  LOG("%s fps: %3lu  mA: %4lu  raw: %3u/%3u/%3u\\n", line,
+      (unsigned long)fps, (unsigned long)(peakmW / 5),
+      (unsigned)g_potRaw[0], (unsigned)g_potRaw[1], (unsigned)g_potRaw[2]);
+#else
+  LOG("%s fps: %3lu  mA: %4lu\\n", line, (unsigned long)fps, (unsigned long)(peakmW / 5));
+#endif
+  peakmW = 0;                    // peak is per line, not since boot
+#else
+  (void)realNow;
+#endif
+}
+
 /* ── main loop ──────────────────────────────────────────────── */
+// forks are never struck directly — they light because their parent did
 uint8_t randomBolt() {
   uint8_t bolts[NUM_SEGMENTS], n = 0;
-  for (uint8_t i = 0; i < NUM_SEGMENTS; i++)
-    if (pgm_read_byte(&SEGMENTS[i].isBolt)) bolts[n++] = i;
+  for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
+    if (sg.isBolt && sg.parent < 0) bolts[n++] = i;
+  }
   return n ? bolts[random8() % n] : 0;
 }
 
+void logBoot() {
+#if STORM_LOG
+  LOG("\\n[storm] StormCloud ready — %u px, %u segments, pin %u, master %u\\n",
+      (unsigned)NUM_LEDS, (unsigned)NUM_SEGMENTS, (unsigned)LED_PIN, (unsigned)MASTER);
+  LOG("[storm] %-16s %5s %5s %6s  %s\\n", "segment", "start", "len", "role", "attachment");
+  for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
+    Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
+    if (sg.parent < 0) {
+      LOG("[storm] %-16s %5u %5u %6s  %s\\n", sg.name, (unsigned)sg.start, (unsigned)sg.len,
+          sg.isBolt ? "bolt" : "cloud", sg.isBolt ? "root channel" : "-");
+    } else {
+      Segment pa; memcpy_P(&pa, &SEGMENTS[sg.parent], sizeof(Segment));
+      LOG("[storm] %-16s %5u %5u %6s  off %s at %u%%\\n", sg.name, (unsigned)sg.start,
+          (unsigned)sg.len, "fork", pa.name, (unsigned)(sg.forkAt * 100 / 255));
+    }
+  }
+  LOG("[storm] palette hue=%u/%u sat=%u/%u -> cool #%02X%02X%02X hot #%02X%02X%02X\\n",
+      (unsigned)g_hue, (unsigned)g_hotHue, (unsigned)g_sat, (unsigned)g_hotSat,
+      coolC.r, coolC.g, coolC.b, hotC.r, hotC.g, hotC.b);
+  LOG("[storm] frame buffer %u B, strike pool %u B, segment table %u B\\n\\n",
+      (unsigned)sizeof(leds), (unsigned)sizeof(strikes), (unsigned)sizeof(SEGMENTS));
+#endif
+}
+`;
+const FILE_MAIN_CPP = `/* ─────────────────────────────────────────────────────────────
+   StormCloud — generated by Bolt Bench
+
+   Four of the five files here are regenerated wholesale every time you
+   export from the bench: layout.h, tuning.h, storm.h and this one.
+   config.h is yours and is never overwritten — pins, logging and
+   palettes live there.
+   ───────────────────────────────────────────────────────────── */
+#include "storm.h"
+#include "controls.h"
+
 void setup() {
+#if STORM_LOG
+  Serial.begin(STORM_LOG_BAUD);
+  uint32_t waited = millis();                 // USB CDC needs a moment to enumerate,
+  while (!Serial && millis() - waited < 1500) { }   // but never hang without a host
+#endif
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  FastLED.setBrightness(MASTER);
+  g_bright = scale8(MASTER, TRIM);
+  FastLED.setBrightness(g_bright);
+  updatePalette();
+  // 300 px at full white is ~18 A at 5 V and this animation really does flash
+  // most of the cloud at once. Uncomment to let FastLED hold the peak down:
+  // FastLED.setMaxPowerInVoltsAndMilliamps(5, 4000);
   random16_set_seed(0x1337);            // same seed the bench previewed
   for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
+  logBoot();
+  controlsBegin();
+  chaosBegin();
+  moodBegin();
 }
 
 void loop() {
-  uint32_t now = millis();
+  controlsUpdate(false);
+  uint32_t now = stormClock();     // virtual: the speed knob stretches this
+  chaosPoll(millis(), now);        // button in real time, strikes in storm time
+  moodUpdate(millis());
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   renderAmbient(now);
@@ -1542,22 +2386,148 @@ void loop() {
   if (now >= nextStrikeAt) {
     uint8_t seg = randomBolt();
     trigger(seg, now);
-    if (random8() < DBL_CHANCE) trigger(randomBolt(), now + rndR(40, CLUSTER_MS + 1));
-    nextStrikeAt = now + rndR(GAP_MIN, GAP_MAX + 1);
+    if (random8() < g_dblChance) trigger(randomBolt(), now + rndR(40, CLUSTER_MS + 1));
+    nextStrikeAt = now + rndR(g_gapMin, g_gapMax + 1);
   }
 
   for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
 
+  logDashboard(millis());     // wall-clock, not the speed-scaled storm clock
+
   FastLED.show();
 }
 `;
+
+function fileLayoutH(){
+  const nameW = Math.max(12, ...runs.map(r => cName(r.name).length + 3));
+  const segLines = runs.map((r, i) =>
+    `  { ${('"' + cName(r.name) + '",').padEnd(nameW)} ${String(r.start).padStart(3)}, ${String(r.drawn || 0).padStart(3)}, ${r.role === 'bolt' ? 1 : 0}, ` +
+    `${String(r.nOX || 0).padStart(3)}, ${String(r.nOY || 0).padStart(3)}, ` +
+    `${String(r.parentIdx == null ? -1 : r.parentIdx).padStart(2)}, ${String(r.forkAt == null ? 128 : r.forkAt).padStart(3)} },` +
+    `${r.parentIdx >= 0 ? '  // forks off ' + cName(runs[r.parentIdx].name) : ''}`).join('\n');
+  const defs = runs.map((r, i) => `#define ${ident(r.name, i).padEnd(22)} ${i}`).join('\n');
+
+  return `/* Routing geometry, generated by Bolt Bench — overwritten on export.
+   ${runs.length} runs · ${usedLeds}/${NUM_LEDS} pixels · ${runs.filter(r => r.role === 'bolt' && r.parentIdx < 0).length} root channels, ${runs.filter(r => r.parentIdx >= 0).length} forks */
+#pragma once
+#include <Arduino.h>
+
+#define NUM_LEDS     ${NUM_LEDS}
+
+#define SEG_NAME_LEN ${SEG_NAME_LEN}       // fixed array, so memcpy_P hands back a usable string
+
+struct Segment {
+  char     name[SEG_NAME_LEN];   // ASCII; folded from the bench's run names
+  uint16_t start;
+  uint16_t len;
+  uint8_t  isBolt;
+  uint8_t  ox, oy;      // channel root, normalised 0..255
+  int8_t   parent;      // -1 = root channel; otherwise the channel it forks off
+  uint8_t  forkAt;      // 0..255 along the parent, where the branch leaves
+};
+
+${defs}
+#define NUM_SEGMENTS ${runs.length}
+
+const Segment SEGMENTS[NUM_SEGMENTS] PROGMEM = {
+${segLines}
+};
+
+// pixel positions, normalised 0..255 across the long axis
+const uint8_t LED_X[NUM_LEDS] PROGMEM = {
+${tableU8(nrmX, NUM_LEDS, 20)}
+};
+const uint8_t LED_Y[NUM_LEDS] PROGMEM = {
+${tableU8(nrmY, NUM_LEDS, 20)}
+};
+`;
+}
+
+function fileTuningH(){
+  const d = (k, v) => `#define ${k.padEnd(13)} ${v}`;
+  return `/* Animation parameters, generated by Bolt Bench — overwritten on export. */
+#pragma once
+
+${d('GAP_MIN', P.gapMin)}
+${d('GAP_MAX', P.gapMax)}
+${d('DBL_CHANCE', P.dblChance)}
+${d('CLUSTER_MS', P.clusterMs)}
+${d('LEAD_MIN', Math.min(P.leadMin, P.leadMax))}
+${d('LEAD_MAX', Math.max(P.leadMin, P.leadMax))}
+${d('TRAIL', P.trail)}
+${d('TAPER', P.taper)}
+${d('STRK_MIN', Math.min(P.strkMin, P.strkMax))}
+${d('STRK_MAX', Math.max(P.strkMin, P.strkMax))}
+${d('DUR_MIN', Math.min(P.durMin, P.durMax))}
+${d('DUR_MAX', Math.max(P.durMin, P.durMax))}
+${d('RGAP_MIN', Math.min(P.rgapMin, P.rgapMax))}
+${d('RGAP_MAX', Math.max(P.rgapMin, P.rgapMax))}
+${d('PARTIAL', P.partial)}
+${d('FORK_DIM', P.forkDim)}
+${d('FORK_FOLLOW', P.forkFollow)}
+${d('GLOW_MS', P.glowMs)}
+${d('AMB_LEVEL', P.ambLevel)}
+${d('AMB_SPEED', P.ambSpeed)}
+${d('CLOUD_FLASH', P.cloudFlash)}
+${d('CLOUD_SPREAD', P.cloudSpread)}
+${d('CLOUD_MS', P.cloudMs)}
+${d('RUMBLE', P.rumble)}
+${d('MASTER', P.master)}
+
+/* Colour. The hue lives in the AFTERGLOW, not the strike: HOT_SAT keeps the
+   return stroke near white so it still reads as hot, and the pixel cools
+   toward the fully saturated HUE as it fades. Push HOT_SAT up and it stops
+   looking like lightning and starts looking like a coloured tube.
+   HOT_HUE shifts the peak's hue as well, which warm palettes need:
+   desaturating red gives pink, but fire runs red to orange to white, so a
+   red palette wants an amber core rather than a salmon one.
+   TRIM scales MASTER per palette — green sits where the eye is most
+   sensitive, so it needs pulling back relative to blue.
+   See PALETTES[] in config.h for starting points. */
+${d('HUE', P.hue)}      // FastLED hue: 0 red, 64 yellow, 96 green, 160 blue, 192 purple
+${d('HOT_HUE', P.hotHue)}      // peak hue; equal to HUE means no shift along the heat ramp
+${d('SAT', P.sat)}
+${d('HOT_SAT', P.hotSat)}
+${d('TRIM', P.trim)}
+`;
+}
+
+function buildFiles(){
+  return {
+    'config.h':    FILE_CONFIG_H,
+    'controls.h':  FILE_CONTROLS_H,
+    'layout.h':    fileLayoutH(),
+    'tuning.h':    fileTuningH(),
+    'storm.h':     FILE_STORM_H,
+    'main.cpp':    FILE_MAIN_CPP,
+    'layout.json': layoutJSON(),
+  };
+}
+
+let exportTab = 'layout.h';
+const codeOut = document.getElementById('codeOut');
+const tabsEl = document.getElementById('tabs');
+
+function buildTabs(){
+  tabsEl.textContent = '';
+  for (const name of Object.keys(buildFiles())){
+    const b = el('button', 'btn' + (name === exportTab ? ' on' : ''), name);
+    if (name === 'config.h' || name === 'controls.h')
+      b.title = 'Starter only — the bench never overwrites this file';
+    b.addEventListener('click', () => { exportTab = name; buildTabs(); buildExport(); });
+    tabsEl.append(b);
+  }
+}
+function buildExport(){
+  const f = buildFiles();
+  codeOut.textContent = f[exportTab] != null ? f[exportTab] : f['layout.h'];
 }
 
 document.getElementById('copyCode').addEventListener('click', async () => {
   const said = document.getElementById('copySaid');
   try {
     await navigator.clipboard.writeText(codeOut.textContent);
-    said.textContent = exportTab === 'ino' ? 'Sketch copied' : 'Layout copied';
+    said.textContent = exportTab + ' copied';
   } catch(e){
     const sel = window.getSelection(); const rg = document.createRange();
     rg.selectNodeContents(codeOut); sel.removeAllRanges(); sel.addRange(rg);
@@ -1572,9 +2542,11 @@ document.getElementById('importJson').addEventListener('click', () => {
     const o = JSON.parse(txt);
     if (!o.runs || !Array.isArray(o.runs)) throw new Error('no runs');
     runs = o.runs.map((r, i) => ({
-      id: 'r' + (uid++), name: String(r.name || 'Run ' + i),
+      id: (typeof r.id === 'string' && r.id) ? r.id : 'r' + (uid++), name: String(r.name || 'Run ' + i),
       role: r.role === 'bolt' ? 'bolt' : 'cloud',
       count: Math.max(1, Math.min(NUM_LEDS, +r.count || 30)),
+      parent: (typeof r.parent === 'string' && r.parent) ? r.parent : null,
+      forkAt: Math.max(0, Math.min(255, +r.forkAt || 128)),
       smooth: r.smooth !== false, d: r.d || null,
       pts: Array.isArray(r.pts) ? r.pts.map(p => [+p[0], +p[1]]) : [[300,200],[500,200]],
     }));
@@ -1604,9 +2576,11 @@ function load(){
     const o = JSON.parse(raw);
     if (o && Array.isArray(o.runs) && o.runs.length){
       runs = o.runs.map((r, i) => ({
-        id: 'r' + (uid++), name: String(r.name || 'Run ' + i),
+        id: (typeof r.id === 'string' && r.id) ? r.id : 'r' + (uid++), name: String(r.name || 'Run ' + i),
         role: r.role === 'bolt' ? 'bolt' : 'cloud',
         count: Math.max(1, Math.min(NUM_LEDS, +r.count || 30)),
+        parent: (typeof r.parent === 'string' && r.parent) ? r.parent : null,
+        forkAt: Math.max(0, Math.min(255, +r.forkAt || 128)),
         smooth: r.smooth !== false, d: r.d || null,
         pts: Array.isArray(r.pts) ? r.pts.map(p => [+p[0], +p[1]]) : [[300,200],[500,200]],
       }));
@@ -1619,12 +2593,14 @@ function load(){
 load();
 buildParams();
 syncParamUI();
+paintSwatches();
+buildTabs();
 sizeStage(); sizeStrip(); sizeScope();
 rebuildLayout();
 renderRuns();
 syncPaste();
 setMode('preview');
-triggerStrike(2);          // open with a bolt in flight, not an empty stage
+triggerStrike(3);          // centre root channel: opens with a fork in flight
 
 const ro = new ResizeObserver(() => { sizeStage(); sizeStrip(); sizeScope(); });
 ro.observe(stageWrap);

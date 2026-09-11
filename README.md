@@ -40,14 +40,19 @@ Indices are allocated cumulatively down the list. The default layout is:
 
 | Run | Role | Count | Indices |
 |---|---|---|---|
-| Cloud body | cloud | 150 | `leds[0…149]` |
-| Bolt · left | bolt | 50 | `leds[150…199]` |
-| Bolt · centre | bolt | 50 | `leds[200…249]` |
-| Bolt · right | bolt | 50 | `leds[250…299]` |
+| Cloud body | cloud | 132 | `leds[0…131]` |
+| Bolt · left | root channel | 38 | `leds[132…169]` |
+| Fork · left | forks off left at 55% | 18 | `leds[170…187]` |
+| Bolt · centre | root channel | 44 | `leds[188…231]` |
+| Fork · centre | forks off centre at 45% | 22 | `leds[232…253]` |
+| Bolt · right | root channel | 34 | `leds[254…287]` |
+| Fork · right | forks off right at 40% | 12 | `leds[288…299]` |
 
 Change any count and everything downstream shifts, in the UI and in the export together. Reorder runs with the arrows to match how you actually wired the rope.
 
 The drawing surface is a 1000 × 760 viewBox. You can build paths three ways: click points directly on the stage (press `E` for edit mode), drag the handles to adjust, or paste an SVG `d` attribute straight out of Illustrator or Inkscape. Cloud runs smooth their points into Catmull-Rom curves; bolt runs stay as hard polyline zigzags, because that is what lightning looks like.
+
+Parent links are stored by run id rather than by position, so reordering or deleting runs never silently reassigns a fork to the wrong channel. Cycles are detected on every rebuild and broken by detaching the offending run.
 
 ### 2. The math contract
 
@@ -73,12 +78,28 @@ The phases, with default tuning:
 | Stepped leader | 22–88 ms | A head races down the channel from the cloud end, leaving a decaying trail behind it |
 | Return stroke | 12–46 ms | The whole channel goes white-hot, brightest and fastest of the sequence |
 | Restrikes | 1–4 strokes, 30–140 ms apart | Repeat flashes at varying brightness; some only light *part* of the channel, as real restrikes do |
-| Afterglow | ~330 ms | The channel decays and cools — heat drops from 255 toward 0, and colour slides from white to blue |
+| Afterglow | ~330 ms | The whole tree decays and cools — heat drops from 255 toward 0, and colour slides from white to blue |
 | Cloud decay | 540 ms | The cloud holds its glow longer than the bolt, which is what sells the depth |
 
 Bolt runs also taper toward the tip, so the channel thins out as it descends.
 
-### 4. Cloud sympathy, and why coordinates ship with the sketch
+### 4. Forks
+
+A fork is a real second length of rope, attached partway down another channel — so it is modelled as a run with a **parent** and an **attachment point** (`forkAt`, 0–255 along the parent), not as a rendering trick.
+
+Two things make it read as lightning rather than as two bolts that happen to fire together:
+
+**The fork's leader launches late and travels at the same speed.** It starts when the parent's leader head reaches the attachment point, and its duration is scaled by length, `parentLeaderMs × forkLen / parentLen`. Propagation velocity is therefore constant across the whole tree, which means a branch and its trunk reach the ground at about the same moment. That is what real forked lightning does, and it is the detail that sells it.
+
+**Forks sit out some restrikes.** Real return strokes often re-illuminate only the main channel. Each strike rolls a `forkMask` at creation time — one bit per stroke, the return stroke always set — and branches light only on the strokes whose bit is set. Two sliders control this: **Fork brightness** (how much dimmer a branch is than its trunk, compounding at each level) and **Fork restrike** (the odds a given restrike travels into the branches).
+
+Forks nest. A fork can itself have forks, to a depth of 3.
+
+Only root channels are ever struck directly — the storm scheduler and `randomBolt()` both filter to `parent < 0`. Clicking a branch on the stage fires the channel it belongs to.
+
+In the routing list, every bolt run gets a **fork of** selector and an attachment percentage. The fork's first point is pinned to its parent's path and redraws when you move the parent or change the percentage, because the rope really is attached; it shows as an amber handle and is the one point you cannot drag.
+
+### 5. Cloud sympathy, and why coordinates ship with the sketch
 
 When a bolt fires, every cloud pixel picks up light based on its **2-D distance from that bolt's root** — not its distance in strip-index space. A rope serpentining through batting has neighbours in space that are nowhere near each other in index order, and index-space falloff looks obviously wrong.
 
@@ -90,6 +111,34 @@ const uint8_t LED_Y[NUM_LEDS] PROGMEM = { ... };
 ```
 
 Positions are normalised to 0–255 across the long axis, which keeps distances isotropic. Each segment also records its own root point (`ox`, `oy`). This is the payload that makes the SVG matter to the microcontroller instead of being just a preview toy.
+
+### 6. Colour: the hue lives in the afterglow
+
+What makes this read as lightning is not the colour, it is the **heat axis** — the channel is white-hot at the stroke and cools to a tint as it fades. So the colour model is a ramp between two endpoints, and `heat` walks between them:
+
+```c
+leds[i].r = qadd8(leds[i].r, scale8(mix8(coolC.r, hotC.r, heat), bright));
+```
+
+`coolC` is the fully saturated `HUE` at `SAT`. `hotC` is `HOT_HUE` at `HOT_SAT`, the latter kept low so the return stroke holds a near-white core. That constraint is the whole trick: push `HOT_SAT` up and the effect stops looking like lightning and starts looking like a coloured tube light. Hue belongs in the decay, not the strike.
+
+**The ramp shifts hue, not only saturation.** Desaturating toward white adds green and blue equally. From blue that gives blue-white and reads as hot; from red it gives *pink*, because nothing in nature gets hot by going pink — fire runs red → orange → yellow → white. `HOT_HUE` lets the peak sit at a different hue from the afterglow, so a red palette cools from an amber core rather than a salmon one. Leave it equal to `HUE` where no shift is wanted.
+
+The tell is the gap between green and blue at the peak, not the ordering of the channels. Red planet used to peak at `#f69e95` — green 158, blue 149, a 9-point gap, which is pink. It now peaks at `#d7af86` — a 41-point gap, unmistakably amber.
+
+Both endpoints are resolved **once per frame**, not per pixel, so the per-pixel cost is three `mix8` and three `scale8` — the same as when the palette was hardcoded blue.
+
+`TRIM` compensates for the eye rather than the LED. Green sits at the peak of human luminous sensitivity, so a green flash at `MASTER` 170 reads about twice as bright as blue at 170. Starting points live in `PALETTES[]` in `config.h`:
+
+| Palette | Hue | Hot hue | Sat | Hot sat | Trim | Reads as |
+|---|---|---|---|---|---|---|
+| storm | 160 | 160 | 200 | 40 | 255 | cold blue-white |
+| tornado | 80 | 64 | 165 | 30 | 200 | sickly yellow-green — the dread is in the *low* saturation |
+| voldemort | 96 | 96 | 220 | 45 | 190 | vivid unnatural green — menace rather than dread |
+| halloween | 192 | 192 | 205 | 55 | 235 | purple |
+| red planet | 4 | 32 | 235 | 70 | 245 | deep red cooling from an amber core |
+
+The bench runs FastLED's own `hsv2rgb_rainbow`, transcribed, so the swatches and the preview land on the same RGB the strip will.
 
 ## Using the bench
 
@@ -116,13 +165,49 @@ Four presets — Distant storm, Rolling, Direct hit, Heat lightning — are star
 
 ## Export
 
-The **Export** panel has two tabs.
+The **Export** panel emits five source files plus the layout. They are split along the line of **ownership**, not by size — which is what makes re-exporting safe:
 
-`StormCloud.ino` is a complete sketch: routing tables, coordinate tables, every tunable as a `#define`, the strike state machine, and the render loop.
+| File | Owner | Overwritten on export |
+|---|---|---|
+| `config.h` | **you** — pins, logging, palettes | never; the bench emits it as a starter only |
+| `controls.h` | **you** — pot pins and mapping | never; starter only |
+| `layout.h` | generator — segments, `LED_X`/`LED_Y` | wholesale |
+| `tuning.h` | generator — animation parameters | wholesale |
+| `storm.h` | generator — the engine | wholesale |
+| `main.cpp` | generator — `setup()` / `loop()` | wholesale |
+
+Drop the four generated files into `src/` after any export; leave your `config.h` alone.
 
 `layout.json` round-trips back into the tool via **Import layout JSON**, so you can version your routing or move it between machines.
 
 Both use Copy rather than a download — this page is often viewed in a sandboxed frame where browser-initiated downloads are blocked, and a Copy button that always works beats a download link that sometimes does not.
+
+### Logging
+
+The sketch logs to serial at 115200 (matching `monitor_speed` in `platformio.ini`). Every log line is behind one flag:
+
+```c
+#define STORM_LOG  1     // 0 removes all of it
+```
+
+Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the define is `#ifndef`-guarded — drops Serial, the format strings, and the per-frame power measurement entirely. On an ESP32 that is **28 KB of flash and 368 bytes of RAM**, so the off switch is real rather than cosmetic.
+
+Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every knob nudge.
+
+```
+mood: tornado/80      rate: 1.00  severity:  3/10 storm: Bolt_Left            fps:  98  mA: 3180
+mood: tornado/80      rate: 1.00  severity:  3/10 storm: Bolt_Centre          fps:  97  mA: 4020
+mood: tornado/80      rate: 1.00  severity:  3/10 storm: _                    fps:  99  mA:  240
+mood: voldemort/96    rate: 1.32  severity:  7/10 storm: Bolt_Centre +1       fps:  96  mA: 5110
+```
+
+`storm` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`. `STORM_LOG_RAW 1` appends the raw 0–255 knob readings.
+
+Fields are fixed-width on purpose. A dashboard whose columns jump around is unreadable at a glance, which is the only thing it is for.
+
+Two lines still print outside this. `DROPPED` is a fault rather than a state — it means the storm is scheduling faster than `MAX_STRIKES` can render — and the boot banner dumps the segment table once so you can check the firmware's idea of the routing against the bench's.
+
+That peak draw figure comes from FastLED's own `calculate_unscaled_power_mW`, so it is the number to watch against whatever supply you end up using — see below.
 
 ### Hardware notes
 
@@ -143,15 +228,98 @@ Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top 
 
 ## Known limits
 
-- **The sketch has not been compiled.** It is a transcription verified by reading, not by a toolchain. Treat the first upload as the real test.
-- Bolts do not fork. Partial restrikes approximate the effect, but a true branch needs a second physical run.
+- **The sketch compiles but has never run on hardware.** `pio run` succeeds clean for `esp32dev` with FastLED 3.9 — no warnings — so the syntax and API use are verified. Timing, colour and the power figures are still unproven on real pixels.
+- Fork nesting is capped at depth 3, in both the preview and the sketch.
 - `MAX_STRIKES` is 6 and `MAX_STROKES` is 6. Push the storm parameters hard enough and strikes will be dropped rather than queued.
 - Preview-only controls — dot size, bloom — model light diffusing through batting. They are not exported, because the controller has no equivalent.
+
+## Knobs
+
+Three B10K linear pots on ADC1 — palette on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. Wiring is on the [pot wiring card](docs/pot-wiring-card.html) ([published](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb)).
+
+**All three knobs are detented.** A continuous knob on a noisy 12-bit ADC is the worst of both worlds: never quite still, never repeatable. A detent holds until the knob moves three quarters of a step, which puts the hysteresis band far above the noise floor:
+
+| Knob | Detents | Tolerance | Margin over real noise |
+|---|---|---|---|
+| Palette | 5 | 16 counts | 94× |
+| Speed | 11 | 6 counts | 35× |
+| Level | 11 | 6 counts | 35× |
+
+Real noise is about ±0.17 counts on the 0–255 scale: roughly ±15 LSB of raw ADC jitter with a 10k source and the 100 nF cap, cut by √32 from oversampling. A *continuous* knob has a tolerance of zero by definition — it dithers at any noise level at all, which is exactly what makes one feel broken.
+
+**The palette knob carries a whole look per detent, not a hue.** Rotating hue alone leaves `SAT` wherever the export left it, and at low saturation every hue is the same near-white — so the knob appears dead no matter how clean the reading is. Each detent sets hue, saturation, peak saturation and trim together from `PALETTES[]` in `config.h`. Add rows there and the knob grows more positions on its own. Fine hue control belongs in the bench; the knob is for choosing.
+
+**Speed is geometric**, 0.25× to 4× across 11 detents, with detent 5 at exactly 1.00×. Equal twists give equal ratio changes; a linear speed knob spends most of its travel somewhere useless.
+
+It drives a **virtual clock, not scaled `millis()`**. Scaling `millis()` directly would teleport every strike in flight the instant the knob moved. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`.
+
+**Sampling is rare and thorough** rather than constant and filtered. One knob is read every 250 ms round-robin, so each is refreshed about every 750 ms, averaging 32 conversions per read. Averaging N conversions cuts noise by √N; a smoothing filter buys the same quiet only by adding lag, so there is no EMA at all now. 32 conversions cost about 3 ms, landing in one frame out of twenty-six.
+
+`analogReadMilliVolts` is used over `analogRead` for the factory calibration curve, with a dead zone trimmed off each rail so the first and last detent stay reachable.
+
+## Chaos button
+
+A momentary button between `GPIO27` and ground, using the internal pull-up — two wires, no resistor, and it shares the ground rail already going to the pots. `CHAOS_ENABLE 0` compiles it out. Not on GPIO34–39: those have no internal pull-ups.
+
+A tap has a **shape**, rather than being a flat flash:
+
+| Phase | Duration | What happens |
+|---|---|---|
+| Volley | instant | Every root channel fires, staggered 90 ms so it reads as a cascade, not one white frame |
+| Hold | 2.5 s | Scheduler gaps collapse from 1400–5200 ms to 90–260 ms, every strike doubles, brightness ignores the level knob and goes to the ceiling |
+| Decay | 2.0 s | All three ease back to wherever the knobs are, like the storm moving off |
+
+The envelope runs in **real** milliseconds while the strikes it schedules run on the **storm** clock — so a tap always lasts about four and a half seconds regardless of where the speed knob sits. Tapping again restarts it. The dashboard reads `severity: CHAOS` throughout.
+
+The scheduler's gap and double-strike settings became runtime values to make this work, which is a down payment on the severity crossfade — that will drive the same three.
+
+## Mood LED
+
+A discrete 4-leg RGB LED on `GPIO25` / `GPIO26` / `GPIO13`, one PWM channel each, showing the live palette colour. It pulses on every strike and rides up during chaos, so one indicator covers mood, activity and fury. `MOOD_LED_ENABLE 0` compiles it out.
+
+It displays `coolC` — the *saturated* palette colour, not the near-white peak the strip renders at. An indicator showing what the pixels show would be white most of the time and useless.
+
+Two things that bite here:
+
+**`MOOD_COMMON_ANODE` must match the part.** Common cathode puts the long leg on ground and lights on HIGH; common anode puts it on 3.3 V and inverts everything. Multimeter in diode mode, black probe on the long leg — if the other three light in turn, it is common cathode.
+
+**Do not use the 220R-on-all-three that starter-kit lessons specify** — that is a 5 V figure. Red drops about 2.0 V while green and blue drop nearer 2.9 V, so at 3.3 V a uniform 220R gives red 5.9 mA, green 1.8 mA and blue 1.4 mA: red four times the others, and blue looking dead. Size them per colour: 220R red, and anything from 39R to 68R on green and blue. At 41R that is 5.9 / 9.8 / 7.3 mA, all inside the LED's 20 mA rating and the ESP32's comfortable 12 mA per pin. Red is the exception and keeps the 220R — it has a whole volt more headroom, so the same small resistor would put it past 30 mA. Only then trim `MOOD_GAIN_R/G/B` by eye, and expect to pull *green* down rather than push blue up, since the eye is far more sensitive to green.
+
+The usual 5 mm part (including the one in the Elegoo starter kit) is **common cathode**, with the pinout `RED · CATHODE · GREEN · BLUE` from the flat side and the cathode the longest lead — so the default `MOOD_COMMON_ANODE 0` is correct for it.
+
+The LEDC API changed in Arduino-ESP32 3.x (channels went away, the pin became the handle). The code compiles either side of that; this project is on 2.0.17.
+
+## Severity and the presets
+
+Worth recording, because the obvious mapping is wrong: **the four bench presets are not one axis.** Distant storm → Rolling → Direct hit is a genuine severity ladder, with Rolling in the middle. Heat lightning is not on it — that is cloud-only sheet lightning with no channel strikes, a different *kind* of storm rather than a milder one. It belongs with the mood knob.
+
+So severity crossfades Distant ↔ Direct hit, and Heat lightning stays a separatechoice of its own.
+
+## Building the firmware
+
+```bash
+pio run                 # compile
+pio run -t upload       # flash
+pio device monitor      # watch the log
+```
+
+`platformio.ini` targets `esp32dev`. Re-exporting overwrites four of the five source files, but never `config.h` — so your pin choice, logging settings and palettes survive.
 
 ## Files
 
 ```
 lightning-simulator/
-├── index.html    the whole tool
-└── README.md     this file
+├── index.html        the bench: routing, tuning, export
+├── README.md         this file
+├── platformio.ini    ESP32 build config
+├── docs/
+│   └── pot-wiring-card.html   bench reference; source for the published card
+└── src/
+    ├── config.h      YOURS: pins, logging, palettes — never regenerated
+    ├── controls.h    YOURS: potentiometer pins and mapping — never regenerated
+    ├── layout.h      generated: segment table, pixel coordinates
+    ├── tuning.h      generated: animation parameters and palette
+    ├── storm.h       generated: the engine
+    ├── main.cpp      generated: setup() and loop()
+    └── layout.json   exported routing, re-importable into the bench
 ```

@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+.AppleDouble
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors
+.vscode/
+.idea/
+.pio/
+*.swp
+*.swo
+*~
+
+# Node (only turns up if you serve the page locally)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.npm/
+
+# Logs and scratch
+*.log
+tmp/
+
+# Arduino IDE / build artifacts
+build/
+*.hex
+*.elf
