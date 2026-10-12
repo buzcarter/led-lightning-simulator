@@ -235,7 +235,7 @@ Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top 
 
 ## Knobs
 
-Three B10K linear pots on ADC1 — palette on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. Wiring is on the [pot wiring card](docs/pot-wiring-card.html) ([published](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb)).
+Three B10K linear pots on ADC1 — palette on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. The whole build (board pinout, pots, chaos button, mood LED and strip) is on the [wiring diagram](docs/wiring-esp32.svg). Pot detail is on the [pot wiring card](docs/pot-wiring-card.html) ([published](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb)).
 
 **All three knobs are 10-position detented rotary switches**: a 3D-printed detent on each pot, read by the `DetentSwitch` library in `lib/` (brought over from Project 16, the detent tuner). A continuous knob on a noisy 12-bit ADC is the worst of both worlds: never quite still, never repeatable. With physical detents each position lands in its own band of raw ADC counts, and the reading has to go 40 counts past a cutoff before the position changes, so a knob holds exactly where you left it.
 
@@ -307,7 +307,9 @@ lightning-simulator/
 ├── README.md         this file
 ├── platformio.ini    ESP32 build config
 ├── docs/
-│   └── pot-wiring-card.html   bench reference; source for the published card
+│   ├── pot-wiring-card.html   bench reference; source for the published card
+│   ├── wiring-esp32.svg       full wiring diagram, DevKit V1 pinout
+│   └── wiring-esp32.py        regenerates the SVG
 ├── lib/
 │   ├── PotReader/    averaged ADC reads (from Project 16)
 │   └── DetentSwitch/ raw reading -> knob position, plus calibrated profiles
