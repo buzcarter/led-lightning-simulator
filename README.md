@@ -195,13 +195,13 @@ Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the def
 Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every knob nudge.
 
 ```
-mood: tornado/80      rate: 1.00  severity:  3/10 storm: Bolt_Left            fps:  98  mA: 3180
-mood: tornado/80      rate: 1.00  severity:  3/10 storm: Bolt_Centre          fps:  97  mA: 4020
-mood: tornado/80      rate: 1.00  severity:  3/10 storm: _                    fps:  99  mA:  240
-mood: voldemort/96    rate: 1.32  severity:  7/10 storm: Bolt_Centre +1       fps:  96  mA: 5110
+mood: tornado/80      rate: 1.00  severity:  3/9  storm: Bolt_Left            fps:  98  mA: 3180
+mood: tornado/80      rate: 1.00  severity:  3/9  storm: Bolt_Centre          fps:  97  mA: 4020
+mood: tornado/80      rate: 1.00  severity:  3/9  storm: _                    fps:  99  mA:  240
+mood: voldemort/96    rate: 1.32  severity:  7/9  storm: Bolt_Centre +1       fps:  96  mA: 5110
 ```
 
-`storm` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`. `STORM_LOG_RAW 1` appends the raw 0–255 knob readings.
+`storm` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`. `STORM_LOG_RAW 1` appends the raw 0–4095 ADC readings for the three knobs, the same units as the cutoffs in `DetentProfiles.h`.
 
 Fields are fixed-width on purpose. A dashboard whose columns jump around is unreadable at a glance, which is the only thing it is for.
 
@@ -237,25 +237,19 @@ Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top 
 
 Three B10K linear pots on ADC1 — palette on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. Wiring is on the [pot wiring card](docs/pot-wiring-card.html) ([published](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb)).
 
-**All three knobs are detented.** A continuous knob on a noisy 12-bit ADC is the worst of both worlds: never quite still, never repeatable. A detent holds until the knob moves three quarters of a step, which puts the hysteresis band far above the noise floor:
+**All three knobs are 10-position detented rotary switches**: a 3D-printed detent on each pot, read by the `DetentSwitch` library in `lib/` (brought over from Project 16, the detent tuner). A continuous knob on a noisy 12-bit ADC is the worst of both worlds: never quite still, never repeatable. With physical detents each position lands in its own band of raw ADC counts, and the reading has to go 40 counts past a cutoff before the position changes, so a knob holds exactly where you left it.
 
-| Knob | Detents | Tolerance | Margin over real noise |
-|---|---|---|---|
-| Palette | 5 | 16 counts | 94× |
-| Speed | 11 | 6 counts | 35× |
-| Level | 11 | 6 counts | 35× |
+Calibration lives in `lib/DetentSwitch/DetentProfiles.h`. All three knobs use `DETENT_10` (`POT_PROFILE` in `controls.h`), which was measured on GPIO34 with one knob. If a knob on another pin skips or sticks at a position, run the Project 16 tuner on it and give it its own profile.
 
-Real noise is about ±0.17 counts on the 0–255 scale: roughly ±15 LSB of raw ADC jitter with a 10k source and the 100 nF cap, cut by √32 from oversampling. A *continuous* knob has a tolerance of zero by definition — it dithers at any noise level at all, which is exactly what makes one feel broken.
+**The palette knob carries a whole look per detent, not a hue.** Rotating hue alone leaves `SAT` wherever the export left it, and at low saturation every hue is the same near-white — so the knob appears dead no matter how clean the reading is. Each detent sets hue, saturation, peak saturation and trim together from `PALETTES[]` in `config.h`. There are five palettes and ten positions, so the list repeats round the dial and every click still changes something; add rows there to fill it. Fine hue control belongs in the bench; the knob is for choosing.
 
-**The palette knob carries a whole look per detent, not a hue.** Rotating hue alone leaves `SAT` wherever the export left it, and at low saturation every hue is the same near-white — so the knob appears dead no matter how clean the reading is. Each detent sets hue, saturation, peak saturation and trim together from `PALETTES[]` in `config.h`. Add rows there and the knob grows more positions on its own. Fine hue control belongs in the bench; the knob is for choosing.
-
-**Speed is geometric**, 0.25× to 4× across 11 detents, with detent 5 at exactly 1.00×. Equal twists give equal ratio changes; a linear speed knob spends most of its travel somewhere useless.
+**Speed is geometric**, 0.25× to 3.03× across the 10 positions, with position 6 at exactly 1.00×. Equal twists give equal ratio changes; a linear speed knob spends most of its travel somewhere useless.
 
 It drives a **virtual clock, not scaled `millis()`**. Scaling `millis()` directly would teleport every strike in flight the instant the knob moved. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`.
 
-**Sampling is rare and thorough** rather than constant and filtered. One knob is read every 250 ms round-robin, so each is refreshed about every 750 ms, averaging 32 conversions per read. Averaging N conversions cuts noise by √N; a smoothing filter buys the same quiet only by adding lag, so there is no EMA at all now. 32 conversions cost about 3 ms, landing in one frame out of twenty-six.
+**Sampling is rare and thorough** rather than constant and filtered. One knob is read every 250 ms round-robin, so each is refreshed about every 750 ms, with `PotReader` averaging 16 conversions per read. Averaging N conversions cuts noise by √N; a smoothing filter buys the same quiet only by adding lag, so there is no EMA at all.
 
-`analogReadMilliVolts` is used over `analogRead` for the factory calibration curve, with a dead zone trimmed off each rail so the first and last detent stay reachable.
+**Level** has one stop per position, 0 to 100% in ninths. Position 1 is `POT_LEVEL_FLOOR`, not off.
 
 ## Chaos button
 
@@ -314,6 +308,9 @@ lightning-simulator/
 ├── platformio.ini    ESP32 build config
 ├── docs/
 │   └── pot-wiring-card.html   bench reference; source for the published card
+├── lib/
+│   ├── PotReader/    averaged ADC reads (from Project 16)
+│   └── DetentSwitch/ raw reading -> knob position, plus calibrated profiles
 └── src/
     ├── config.h      YOURS: pins, logging, palettes — never regenerated
     ├── controls.h    YOURS: potentiometer pins and mapping — never regenerated
