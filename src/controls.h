@@ -45,8 +45,8 @@
 #define POT_INTERVAL_MS  250
 
 /* Speed detents, 8.8 fixed point, one per knob position. Geometric, because
-   equal twists should give equal ratio changes; position 6 is exactly 1.00x. */
-#define SPEED_STEPS   10
+   equal twists should give equal ratio changes; position 6 is exactly 1.00x.
+   SPEED_STEPS lives in storm.h, beside LEVEL_STEPS, so the dashboard can see it. */
 static const uint16_t SPEED_Q8[SPEED_STEPS] = {
    64,   84,  111,  147,  194,  256,  338,  446,  588,  776
 /* 0.25x                        1.00x                   3.03x */
@@ -313,7 +313,8 @@ void controlsUpdate(bool force) {
     trimChanged = true;
   }
 
-  g_speedQ8 = SPEED_Q8[potIndex(potSpeed, SPEED_STEPS)];
+  g_speed   = potIndex(potSpeed, SPEED_STEPS);
+  g_speedQ8 = SPEED_Q8[g_speed];
 
   g_level = potIndex(potLevel, LEVEL_STEPS);
   uint8_t ceil8 = scale8(MASTER, g_trim);

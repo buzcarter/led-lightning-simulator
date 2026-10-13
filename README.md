@@ -195,13 +195,13 @@ Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the def
 Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every knob nudge.
 
 ```
-palette: tornado/80      speed: 1.00  level:  3/9  storm: Bolt_Left            fps:  98  mA: 3180
-palette: tornado/80      speed: 1.00  level:  3/9  storm: Bolt_Centre          fps:  97  mA: 4020
-palette: tornado/80      speed: 1.00  level:  3/9  storm: _                    fps:  99  mA:  240
-palette: voldemort/96    speed: 1.32  level:  7/9  storm: Bolt_Centre +1       fps:  96  mA: 5110
+palette: tornado     speed: 60%         level: 40%        | strike: Bolt_Left        | fps:  98  mA: 3180
+palette: tornado     speed: 60%         level: 40%        | strike: Bolt_Centre      | fps:  97  mA: 4020
+palette: tornado     speed: 60%         level: 40%        | strike: _                | fps:  99  mA:  240
+palette: voldemort   speed: 70%         level: 80%        | strike: Bolt_Centre +1   | fps:  96  mA: 5110
 ```
 
-`storm` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`. `STORM_LOG_RAW 1` appends the raw 0–4095 ADC readings for the three knobs, the same units as the cutoffs in `DetentProfiles.h`.
+`strike` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`. `STORM_LOG_RAW 1` appends the raw 0–4095 ADC readings for the three knobs, the same units as the cutoffs in `DetentProfiles.h`.
 
 Fields are fixed-width on purpose. A dashboard whose columns jump around is unreadable at a glance, which is the only thing it is for.
 
