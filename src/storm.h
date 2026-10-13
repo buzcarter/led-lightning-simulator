@@ -22,6 +22,7 @@ CRGB coolC, hotC;
    set of detents. */
 #define LEVEL_STEPS   10
 #define LEVEL_PERCENT(i)  ((uint16_t)(i) * 100 / (LEVEL_STEPS - 1))
+#define SPEED_STEPS   10
 
 uint8_t  g_hue    = HUE;
 uint8_t  g_sat    = SAT;
@@ -41,6 +42,7 @@ uint8_t  g_dblChance = DBL_CHANCE;
 uint8_t  g_chaos     = 0;              // 0..255, position in the chaos envelope
 uint32_t g_strikeAt  = 0;              // millis of the last strike, for the mood LED
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
+uint8_t  g_speed   = SPEED_STEPS / 2;  // 0..SPEED_STEPS-1, the speed knob's detent; 5 is 1.00x
 
 void updatePalette() {
   hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
@@ -289,7 +291,18 @@ void renderAmbient(uint32_t now) {
 /* One line, rewritten when the state a person would notice changes, and
    refreshed on a slow timer while it does not. Not a log: no scrollback of
    every strike and every knob nudge, just the current picture. Only DROPPED
-   still prints on its own, because it is a fault rather than a state. */
+   still prints on its own, because it is a fault rather than a state.
+
+   Grouped by what you are looking for: the three knobs first, then the
+   strike in flight, then the diagnostics. */
+
+/* A knob position as a percentage of its travel, the way a person counts
+   clicks, rather than the multiplier or brightness it maps to. */
+static void knobPercent(char *buf, size_t n, uint8_t idx, uint8_t steps) {
+  snprintf(buf, n, "%u%%%s", (unsigned)((idx + 1) * 100 / steps),
+           idx == 0 ? " (min)" : idx == steps - 1 ? " (max)" : "");
+}
+
 void logDashboard(uint32_t realNow) {
 #if STORM_LOG
   static char     lastLine[128] = "";
@@ -319,18 +332,15 @@ void logDashboard(uint32_t realNow) {
     else             snprintf(chan, sizeof chan, "%s", sg.name);
   }
 
-  char pal[22];
-  snprintf(pal, sizeof pal, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
-
-  char lvl[8];
+  char spd[12], lvl[12];
+  knobPercent(spd, sizeof spd, g_speed, SPEED_STEPS);
   if (g_chaos) snprintf(lvl, sizeof lvl, "CHAOS");
-  else         snprintf(lvl, sizeof lvl, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
+  else         knobPercent(lvl, sizeof lvl, g_level, LEVEL_STEPS);
 
   char line[128];
   snprintf(line, sizeof line,
-           "palette: %-15s speed: %u.%02u  level: %-5s storm: %-20s",
-           pal, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
-           lvl, chan);
+           "palette: %-10s  speed: %-10s  level: %-10s | strike: %-16s",
+           PALETTES[g_palette].name, spd, lvl, chan);
 
   bool changed = strcmp(line, lastLine) != 0;
   bool due     = (realNow - lastAt) >= STORM_LOG_STATS;
@@ -341,11 +351,11 @@ void logDashboard(uint32_t realNow) {
   lastAt = realNow;
 
 #if STORM_LOG_RAW
-  LOG("%s fps: %3lu  mA: %4lu  raw: %4u/%4u/%4u\n", line,
+  LOG("%s | fps: %3lu  mA: %4lu | raw: %4u/%4u/%4u\n", line,
       (unsigned long)fps, (unsigned long)(peakmW / 5),
       (unsigned)g_potRaw[0], (unsigned)g_potRaw[1], (unsigned)g_potRaw[2]);
 #else
-  LOG("%s fps: %3lu  mA: %4lu\n", line, (unsigned long)fps, (unsigned long)(peakmW / 5));
+  LOG("%s | fps: %3lu  mA: %4lu\n", line, (unsigned long)fps, (unsigned long)(peakmW / 5));
 #endif
   peakmW = 0;                    // peak is per line, not since boot
 #else
