@@ -319,18 +319,18 @@ void logDashboard(uint32_t realNow) {
     else             snprintf(chan, sizeof chan, "%s", sg.name);
   }
 
-  char mood[22];
-  snprintf(mood, sizeof mood, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
+  char pal[22];
+  snprintf(pal, sizeof pal, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
 
-  char sev[8];
-  if (g_chaos) snprintf(sev, sizeof sev, "CHAOS");
-  else         snprintf(sev, sizeof sev, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
+  char lvl[8];
+  if (g_chaos) snprintf(lvl, sizeof lvl, "CHAOS");
+  else         snprintf(lvl, sizeof lvl, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
 
   char line[128];
   snprintf(line, sizeof line,
-           "mood: %-15s rate: %u.%02u  severity: %-5s storm: %-20s",
-           mood, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
-           sev, chan);
+           "palette: %-15s speed: %u.%02u  level: %-5s storm: %-20s",
+           pal, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
+           lvl, chan);
 
   bool changed = strcmp(line, lastLine) != 0;
   bool due     = (realNow - lastAt) >= STORM_LOG_STATS;

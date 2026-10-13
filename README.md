@@ -195,10 +195,10 @@ Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the def
 Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every knob nudge.
 
 ```
-mood: tornado/80      rate: 1.00  severity:  3/9  storm: Bolt_Left            fps:  98  mA: 3180
-mood: tornado/80      rate: 1.00  severity:  3/9  storm: Bolt_Centre          fps:  97  mA: 4020
-mood: tornado/80      rate: 1.00  severity:  3/9  storm: _                    fps:  99  mA:  240
-mood: voldemort/96    rate: 1.32  severity:  7/9  storm: Bolt_Centre +1       fps:  96  mA: 5110
+palette: tornado/80      speed: 1.00  level:  3/9  storm: Bolt_Left            fps:  98  mA: 3180
+palette: tornado/80      speed: 1.00  level:  3/9  storm: Bolt_Centre          fps:  97  mA: 4020
+palette: tornado/80      speed: 1.00  level:  3/9  storm: _                    fps:  99  mA:  240
+palette: voldemort/96    speed: 1.32  level:  7/9  storm: Bolt_Centre +1       fps:  96  mA: 5110
 ```
 
 `storm` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`. `STORM_LOG_RAW 1` appends the raw 0–4095 ADC readings for the three knobs, the same units as the cutoffs in `DetentProfiles.h`.
@@ -263,7 +263,7 @@ A tap has a **shape**, rather than being a flat flash:
 | Hold | 2.5 s | Scheduler gaps collapse from 1400–5200 ms to 90–260 ms, every strike doubles, brightness ignores the level knob and goes to the ceiling |
 | Decay | 2.0 s | All three ease back to wherever the knobs are, like the storm moving off |
 
-The envelope runs in **real** milliseconds while the strikes it schedules run on the **storm** clock — so a tap always lasts about four and a half seconds regardless of where the speed knob sits. Tapping again restarts it. The dashboard reads `severity: CHAOS` throughout.
+The envelope runs in **real** milliseconds while the strikes it schedules run on the **storm** clock — so a tap always lasts about four and a half seconds regardless of where the speed knob sits. Tapping again restarts it. The dashboard reads `level: CHAOS` throughout.
 
 The scheduler's gap and double-strike settings became runtime values to make this work, which is a down payment on the severity crossfade — that will drive the same three.
 
@@ -285,7 +285,7 @@ The LEDC API changed in Arduino-ESP32 3.x (channels went away, the pin became th
 
 ## Severity and the presets
 
-Worth recording, because the obvious mapping is wrong: **the four bench presets are not one axis.** Distant storm → Rolling → Direct hit is a genuine severity ladder, with Rolling in the middle. Heat lightning is not on it — that is cloud-only sheet lightning with no channel strikes, a different *kind* of storm rather than a milder one. It belongs with the mood knob.
+Worth recording, because the obvious mapping is wrong: **the four bench presets are not one axis.** Distant storm → Rolling → Direct hit is a genuine severity ladder, with Rolling in the middle. Heat lightning is not on it — that is cloud-only sheet lightning with no channel strikes, a different *kind* of storm rather than a milder one. It belongs with the palette knob.
 
 So severity crossfades Distant ↔ Direct hit, and Heat lightning stays a separatechoice of its own.
 
@@ -300,6 +300,8 @@ pio device monitor      # watch the log
 `platformio.ini` targets `esp32dev`. Re-exporting overwrites four of the five source files, but never `config.h` — so your pin choice, logging settings and palettes survive.
 
 ## Files
+
+![ESP32 wiring diagram](docs/wiring-esp32.svg)
 
 ```
 lightning-simulator/
@@ -322,3 +324,4 @@ lightning-simulator/
     ├── main.cpp      generated: setup() and loop()
     └── layout.json   exported routing, re-importable into the bench
 ```
+
