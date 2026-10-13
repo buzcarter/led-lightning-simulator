@@ -16,13 +16,11 @@ CRGB coolC, hotC;
    a knob can move has to live in RAM rather than as a #define; everything
    else stays a compile-time constant. Silent — updatePalette() is called on
    every hue change, so logging here would flood the port while you turn. */
-/* Level runs in detents rather than continuously: 5% increments over
-   0..100% is 11 stops at 10% each (0, 10, 20 ... 100). Fewer detents means
-   a wider hysteresis band — at 11 steps that is ~18 ADC counts against
-   maybe 10 of noise, so a position holds where you leave it. Both
+/* Level runs in detents rather than continuously: one stop per position of
+   the 10-position knob, 0..100% in ninths (0, 11, 22 ... 100). Both
    brightness now and storm severity later read g_level, so they share one
    set of detents. */
-#define LEVEL_STEPS   11
+#define LEVEL_STEPS   10
 #define LEVEL_PERCENT(i)  ((uint16_t)(i) * 100 / (LEVEL_STEPS - 1))
 
 uint8_t  g_hue    = HUE;
@@ -33,7 +31,7 @@ uint8_t  g_bright = 0;                 // resolved in setup()
 uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
 uint8_t  g_trim   = TRIM;              // brightness trim of the live palette
 uint8_t  g_palette = 0;                // index into PALETTES[] in config.h
-uint8_t  g_potRaw[3] = {0, 0, 0};      // palette/speed/level, 0..255, for STORM_LOG_RAW
+uint16_t g_potRaw[3] = {0, 0, 0};      // palette/speed/level, raw ADC 0..4095, for STORM_LOG_RAW
 
 /* Scheduler settings the chaos button borrows for a few seconds. Seeded from
    tuning.h; the severity crossfade will drive these too when it lands. */
@@ -321,18 +319,18 @@ void logDashboard(uint32_t realNow) {
     else             snprintf(chan, sizeof chan, "%s", sg.name);
   }
 
-  char mood[22];
-  snprintf(mood, sizeof mood, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
+  char pal[22];
+  snprintf(pal, sizeof pal, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
 
-  char sev[8];
-  if (g_chaos) snprintf(sev, sizeof sev, "CHAOS");
-  else         snprintf(sev, sizeof sev, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
+  char lvl[8];
+  if (g_chaos) snprintf(lvl, sizeof lvl, "CHAOS");
+  else         snprintf(lvl, sizeof lvl, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
 
   char line[128];
   snprintf(line, sizeof line,
-           "mood: %-15s rate: %u.%02u  severity: %-5s storm: %-20s",
-           mood, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
-           sev, chan);
+           "palette: %-15s speed: %u.%02u  level: %-5s storm: %-20s",
+           pal, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
+           lvl, chan);
 
   bool changed = strcmp(line, lastLine) != 0;
   bool due     = (realNow - lastAt) >= STORM_LOG_STATS;
@@ -343,7 +341,7 @@ void logDashboard(uint32_t realNow) {
   lastAt = realNow;
 
 #if STORM_LOG_RAW
-  LOG("%s fps: %3lu  mA: %4lu  raw: %3u/%3u/%3u\n", line,
+  LOG("%s fps: %3lu  mA: %4lu  raw: %4u/%4u/%4u\n", line,
       (unsigned long)fps, (unsigned long)(peakmW / 5),
       (unsigned)g_potRaw[0], (unsigned)g_potRaw[1], (unsigned)g_potRaw[2]);
 #else

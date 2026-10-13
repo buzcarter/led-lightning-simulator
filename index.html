@@ -1510,10 +1510,11 @@ const FILE_CONTROLS_H = `/* ─────────────────�
    NOT 5 V — these pins are not 5 V tolerant. Swap the outer legs to
    reverse a knob's direction.
 
-   All three knobs are detented. A continuous knob on a noisy 12-bit ADC
-   is the worst of both worlds: never quite still, never repeatable. With
-   detents the hysteresis band is far wider than the noise, so a position
-   holds exactly where you left it.
+   All three knobs are 10-position detented rotary switches: a 3D-printed
+   detent on each pot, read by DetentSwitch (lib/, from Project 16). A
+   continuous knob on a noisy 12-bit ADC is the worst of both worlds: never
+   quite still, never repeatable. With detents the hysteresis band is far
+   wider than the noise, so a position holds exactly where you left it.
    ───────────────────────────────────────────────────────────── */
 #pragma once
 #include <Arduino.h>
@@ -1530,29 +1531,26 @@ const FILE_CONTROLS_H = `/* ─────────────────�
 #define POT_SPEED_PIN    GPIO_NUM_33
 #define POT_LEVEL_PIN    GPIO_NUM_34
 
-/* The ESP32 ADC flattens near both rails, so trim a dead zone off each end
-   to make the first and last detent reachable. */
-#define POT_MV_MIN       80
-#define POT_MV_MAX       3140
+/* Detent calibration, from lib/DetentSwitch/DetentProfiles.h. DETENT_10 was
+   measured on GPIO34 with one knob; the same print on the other two pins
+   should land close. If one skips or sticks at a position, re-run the
+   Project 16 tuner on that knob and give it its own profile. */
+#define POT_PROFILE      DETENT_10
 
 /* Sampling. One pot per interval, round-robin, so each knob is read every
    3 x POT_INTERVAL_MS — about 750 ms. Knob positions do not need to be
    fresh at frame rate, and sampling rarely but thoroughly beats sampling
    constantly and then filtering: averaging N conversions cuts the noise by
    sqrt(N), where a filter buys the same quiet only by adding lag.
-
-   32 conversions costs ~3 ms, landing in one frame out of every twenty-six.
-   There is deliberately no smoothing filter now: with this much averaging
-   plus detent hysteresis, an EMA would only add latency. */
+   PotReader averages 16 conversions per read. */
 #define POT_INTERVAL_MS  250
-#define POT_OVERSAMPLE   32
 
-/* Speed detents, 8.8 fixed point. Geometric, because equal twists should
-   give equal ratio changes; index 5 is exactly 1.00x. */
-#define SPEED_STEPS   11
+/* Speed detents, 8.8 fixed point, one per knob position. Geometric, because
+   equal twists should give equal ratio changes; position 6 is exactly 1.00x. */
+#define SPEED_STEPS   10
 static const uint16_t SPEED_Q8[SPEED_STEPS] = {
-   64,   84,  111,  147,  194,  256,  338,  446,  588,  776, 1024
-/* 0.25x                        1.00x                        4.00x */
+   64,   84,  111,  147,  194,  256,  338,  446,  588,  776
+/* 0.25x                        1.00x                   3.03x */
 };
 
 /* Brightness at level detent 0. Not zero — a knob position that makes the
@@ -1767,60 +1765,43 @@ inline void chaosPoll(uint32_t, uint32_t) {}
 
 #if POTS_ENABLE
 
-struct Pot { gpio_num_t pin; uint8_t out; };
+#include <DetentSwitch.h>
+#include <DetentProfiles.h>
 
-static Pot potPalette = { POT_PALETTE_PIN, 0 };
-static Pot potSpeed   = { POT_SPEED_PIN,   0 };
-static Pot potLevel   = { POT_LEVEL_PIN,   0 };
+static DetentSwitch potPalette(POT_PALETTE_PIN, POT_PROFILE);
+static DetentSwitch potSpeed  (POT_SPEED_PIN,   POT_PROFILE);
+static DetentSwitch potLevel  (POT_LEVEL_PIN,   POT_PROFILE);
 
-static uint8_t heldPalette = 0, heldSpeed = 0, heldLevel = 0;
-
-static inline void potRead(Pot &p) {
-  uint32_t acc = 0;
-  for (uint8_t i = 0; i < POT_OVERSAMPLE; i++) acc += analogReadMilliVolts(p.pin);
-  int32_t mv = (int32_t)(acc / POT_OVERSAMPLE);
-  if (mv <= POT_MV_MIN)      p.out = 0;
-  else if (mv >= POT_MV_MAX) p.out = 255;
-  else p.out = (uint8_t)(((mv - POT_MV_MIN) * 255) / (POT_MV_MAX - POT_MV_MIN));
-}
-
-/* Snap 0..255 to one of \`steps\` detents, holding the current one until the
-   knob has moved three quarters of a step. Quantising without that is worse
-   than not quantising: park on a boundary and noise flips it forever.
-   At 11 steps the band is ~18 counts against maybe 10 of ADC noise. */
-static inline uint8_t potDetent(uint8_t v, uint8_t steps, uint8_t &held) {
-  if (steps < 2) return 0;
-  uint16_t width  = 255 / (steps - 1);
-  int16_t  centre = (int16_t)((uint16_t)held * 255 / (steps - 1));
-  int16_t  d = (int16_t)v - centre;
-  if (d < 0) d = -d;
-  if (d > (int16_t)(width * 3 / 4))
-    held = (uint8_t)(((uint32_t)v * (steps - 1) + 127) / 255);
-  return held;
+/* Knob position (1..N) as an index into a table of \`steps\` entries. A knob
+   with more detents than the table has stays on the last entry. */
+static inline uint8_t potIndex(const DetentSwitch &k, uint8_t steps) {
+  uint8_t i = k.position() ? k.position() - 1 : 0;
+  return i < steps ? i : steps - 1;
 }
 
 void controlsUpdate(bool force) {
   static uint32_t nextAt = 0;
   static uint8_t  turn = 0;
-  static uint32_t loggedAt = 0;
 
   if (force) {
-    potRead(potPalette); potRead(potSpeed); potRead(potLevel);
+    potPalette.update(); potSpeed.update(); potLevel.update();
   } else {
     if ((int32_t)(millis() - nextAt) < 0) return;
     nextAt = millis() + POT_INTERVAL_MS;
     switch (turn) {
-      case 0:  potRead(potPalette); break;
-      case 1:  potRead(potSpeed);   break;
-      default: potRead(potLevel);   break;
+      case 0:  potPalette.update(); break;
+      case 1:  potSpeed.update();   break;
+      default: potLevel.update();   break;
     }
     turn = (turn + 1) % 3;
   }
 
   /* Palette, not raw hue. Rotating hue alone leaves SAT wherever tuning.h
      left it — and at a low saturation every hue is the same near-white, so
-     the knob appears dead. Each detent carries a whole look instead. */
-  uint8_t pal = potDetent(potPalette.out, NUM_PALETTES, heldPalette);
+     the knob appears dead. Each detent carries a whole look instead. With
+     fewer palettes than detents they repeat round the dial, so every click
+     still changes something; add palettes in config.h to fill it. */
+  uint8_t pal = potIndex(potPalette, 255) % NUM_PALETTES;
   bool trimChanged = false;
   if (force || pal != g_palette) {
     g_palette = pal;
@@ -1833,29 +1814,28 @@ void controlsUpdate(bool force) {
     trimChanged = true;
   }
 
-  uint8_t sp = potDetent(potSpeed.out, SPEED_STEPS, heldSpeed);
-  g_speedQ8 = SPEED_Q8[sp];
+  g_speedQ8 = SPEED_Q8[potIndex(potSpeed, SPEED_STEPS)];
 
-  g_level = potDetent(potLevel.out, LEVEL_STEPS, heldLevel);
+  g_level = potIndex(potLevel, LEVEL_STEPS);
   uint8_t ceil8 = scale8(MASTER, g_trim);
   uint8_t span  = ceil8 > POT_LEVEL_FLOOR ? ceil8 - POT_LEVEL_FLOOR : 0;
   uint8_t b = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
   if (force || trimChanged || b != g_bright) { g_bright = b; FastLED.setBrightness(b); }
 
-  g_potRaw[0] = potPalette.out;
-  g_potRaw[1] = potSpeed.out;
-  g_potRaw[2] = potLevel.out;
+  g_potRaw[0] = potPalette.raw();
+  g_potRaw[1] = potSpeed.raw();
+  g_potRaw[2] = potLevel.raw();
 }
 
 void controlsBegin() {
-  analogReadResolution(12);
+  potPalette.begin(); potSpeed.begin(); potLevel.begin();
   controlsUpdate(true);
-  LOG("[pots]  palette GPIO%u (%u), speed GPIO%u (%u), level GPIO%u (%u detents)\\n",
-      (unsigned)POT_PALETTE_PIN, (unsigned)NUM_PALETTES,
-      (unsigned)POT_SPEED_PIN,   (unsigned)SPEED_STEPS,
-      (unsigned)POT_LEVEL_PIN,   (unsigned)LEVEL_STEPS);
-  LOG("[pots]  sampled %u at a time, one knob every %u ms\\n",
-      (unsigned)POT_OVERSAMPLE, (unsigned)POT_INTERVAL_MS);
+  LOG("[pots]  palette GPIO%u, speed GPIO%u, level GPIO%u, %u detents each\\n",
+      (unsigned)POT_PALETTE_PIN, (unsigned)POT_SPEED_PIN, (unsigned)POT_LEVEL_PIN,
+      (unsigned)potLevel.positions());
+  LOG("[pots]  %u palettes, %u speeds, %u levels; one knob every %u ms\\n",
+      (unsigned)NUM_PALETTES, (unsigned)SPEED_STEPS, (unsigned)LEVEL_STEPS,
+      (unsigned)POT_INTERVAL_MS);
 }
 
 #else   /* POTS_ENABLE == 0 — knobs compiled out, tuning.h rules */
@@ -1908,7 +1888,7 @@ const FILE_CONFIG_H = `/* ──────────────────
   #define STORM_LOG_MIN_MS 120    // floor between lines, so a burst cannot flood the port
 #endif
 #ifndef STORM_LOG_RAW
-  #define STORM_LOG_RAW 0         // 1 appends the raw 0..255 pot readings
+  #define STORM_LOG_RAW 0         // 1 appends the raw 0..4095 pot readings
 #endif
 
 #if STORM_LOG
@@ -1968,13 +1948,11 @@ CRGB coolC, hotC;
    a knob can move has to live in RAM rather than as a #define; everything
    else stays a compile-time constant. Silent — updatePalette() is called on
    every hue change, so logging here would flood the port while you turn. */
-/* Level runs in detents rather than continuously: 5% increments over
-   0..100% is 11 stops at 10% each (0, 10, 20 ... 100). Fewer detents means
-   a wider hysteresis band — at 11 steps that is ~18 ADC counts against
-   maybe 10 of noise, so a position holds where you leave it. Both
+/* Level runs in detents rather than continuously: one stop per position of
+   the 10-position knob, 0..100% in ninths (0, 11, 22 ... 100). Both
    brightness now and storm severity later read g_level, so they share one
    set of detents. */
-#define LEVEL_STEPS   11
+#define LEVEL_STEPS   10
 #define LEVEL_PERCENT(i)  ((uint16_t)(i) * 100 / (LEVEL_STEPS - 1))
 
 uint8_t  g_hue    = HUE;
@@ -1985,7 +1963,7 @@ uint8_t  g_bright = 0;                 // resolved in setup()
 uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
 uint8_t  g_trim   = TRIM;              // brightness trim of the live palette
 uint8_t  g_palette = 0;                // index into PALETTES[] in config.h
-uint8_t  g_potRaw[3] = {0, 0, 0};      // palette/speed/level, 0..255, for STORM_LOG_RAW
+uint16_t g_potRaw[3] = {0, 0, 0};      // palette/speed/level, raw ADC 0..4095, for STORM_LOG_RAW
 
 /* Scheduler settings the chaos button borrows for a few seconds. Seeded from
    tuning.h; the severity crossfade will drive these too when it lands. */
@@ -2273,18 +2251,18 @@ void logDashboard(uint32_t realNow) {
     else             snprintf(chan, sizeof chan, "%s", sg.name);
   }
 
-  char mood[22];
-  snprintf(mood, sizeof mood, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
+  char pal[22];
+  snprintf(pal, sizeof pal, "%s/%u", PALETTES[g_palette].name, (unsigned)g_hue);
 
-  char sev[8];
-  if (g_chaos) snprintf(sev, sizeof sev, "CHAOS");
-  else         snprintf(sev, sizeof sev, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
+  char lvl[8];
+  if (g_chaos) snprintf(lvl, sizeof lvl, "CHAOS");
+  else         snprintf(lvl, sizeof lvl, "%2u/%-2u", (unsigned)g_level, (unsigned)(LEVEL_STEPS - 1));
 
   char line[128];
   snprintf(line, sizeof line,
-           "mood: %-15s rate: %u.%02u  severity: %-5s storm: %-20s",
-           mood, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
-           sev, chan);
+           "palette: %-15s speed: %u.%02u  level: %-5s storm: %-20s",
+           pal, (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256),
+           lvl, chan);
 
   bool changed = strcmp(line, lastLine) != 0;
   bool due     = (realNow - lastAt) >= STORM_LOG_STATS;
@@ -2295,7 +2273,7 @@ void logDashboard(uint32_t realNow) {
   lastAt = realNow;
 
 #if STORM_LOG_RAW
-  LOG("%s fps: %3lu  mA: %4lu  raw: %3u/%3u/%3u\\n", line,
+  LOG("%s fps: %3lu  mA: %4lu  raw: %4u/%4u/%4u\\n", line,
       (unsigned long)fps, (unsigned long)(peakmW / 5),
       (unsigned)g_potRaw[0], (unsigned)g_potRaw[1], (unsigned)g_potRaw[2]);
 #else
