@@ -41,7 +41,7 @@
   #define STORM_LOG_MIN_MS 120    // floor between lines, so a burst cannot flood the port
 #endif
 #ifndef STORM_LOG_RAW
-  #define STORM_LOG_RAW 0         // 1 appends the raw 0..255 pot readings
+  #define STORM_LOG_RAW 0         // 1 appends the raw 0..4095 pot readings
 #endif
 
 #if STORM_LOG

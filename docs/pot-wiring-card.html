@@ -165,11 +165,11 @@ footer p{margin:0 0 7px}
 <h2>Knobs</h2>
 <table>
   <tr><th>Pin</th><th>Knob</th><th>Range</th></tr>
-  <tr><td class="k">GPIO32</td><td>Palette</td><td class="n">5 detents, one whole look each — storm, tornado, voldemort, halloween, red planet</td></tr>
-  <tr><td class="k">GPIO33</td><td>Speed</td><td class="n">11 detents, 0.25× to 4× geometric; detent 5 is exactly 1.00×</td></tr>
-  <tr><td class="k">GPIO34</td><td>Level</td><td class="n">11 detents in 10% steps — brightness for now, storm severity later</td></tr>
+  <tr><td class="k">GPIO32</td><td>Palette</td><td class="n">10 detents, one whole look each — storm, tornado, voldemort, halloween, red planet, repeating round the dial</td></tr>
+  <tr><td class="k">GPIO33</td><td>Speed</td><td class="n">10 detents, 0.25× to 3.03× geometric; position 6 is exactly 1.00×</td></tr>
+  <tr><td class="k">GPIO34</td><td>Level</td><td class="n">10 detents, 0 to 100% in ninths — brightness for now, storm severity later</td></tr>
 </table>
-<p class="note">All three knobs are detented, holding position until you move three quarters of a step. A continuous knob on a noisy 12-bit ADC is the worst of both worlds — never quite still, never repeatable. Each pot is read once every 750 ms, averaging 32 conversions.</p>
+<p class="note">All three knobs are detented, holding position until the reading goes 40 counts past a cutoff. A continuous knob on a noisy 12-bit ADC is the worst of both worlds — never quite still, never repeatable. Each pot is read once every 750 ms, averaging 16 conversions.</p>
 <p class="note"><strong>The palette knob carries a whole look per detent, not a hue.</strong> Rotating hue alone leaves saturation wherever the export left it, and at low saturation every hue is the same near-white — so the knob appears dead. Fine hue control lives in the bench; the knob is for choosing.</p>
 <p class="note">All three are ADC1. <strong>ADC2 stops working entirely once WiFi is enabled</strong> — that rules out GPIO 0, 2, 4, 12–15 and 25–27. GPIO34 is input-only, which is a feature here: it cannot be driven as an output by mistake.</p>
 
@@ -211,7 +211,7 @@ footer p{margin:0 0 7px}
 </figure>
 <p class="note">A momentary pushbutton between <code>GPIO27</code> and ground. The internal pull-up does the rest, so it is two wires and no resistor — and it shares the ground rail already running to the pots, making it one extra conductor in the loom.</p>
 <p class="note"><strong>Do not put it on GPIO34–39.</strong> Those pins have no internal pull-ups and would need an external one. Any ordinary output-capable pin works: 13, 14, 25, 26, 27, 33.</p>
-<p class="note">A tap fires every root channel at once, staggered 90 ms apart so it reads as a cascade rather than one white frame, then holds the storm at maximum for 2.5 s and eases back to your knob positions over another 2 s. Tapping again restarts it. The dashboard shows <code>severity: CHAOS</code> while it runs.</p>
+<p class="note">A tap fires every root channel at once, staggered 90 ms apart so it reads as a cascade rather than one white frame, then holds the storm at maximum for 2.5 s and eases back to your knob positions over another 2 s. Tapping again restarts it. The dashboard shows <code>level: CHAOS</code> while it runs.</p>
 
 <h2>Mood LED</h2>
 <figure>
@@ -290,7 +290,7 @@ void loop() {
   <tr><td class="k">Stuck at 0<br>or at max</td><td class="n">Outer legs shorted, or the wiper is on an outer leg — meter it: the middle pin should change as you turn</td></tr>
   <tr><td class="k">Backwards</td><td class="n">Swap pin 1 and pin 3</td></tr>
   <tr><td class="k">Jumps around<br>±100 mV</td><td class="n">Missing 100 nF, or the cap is at the pot end instead of the board end</td></tr>
-  <tr><td class="k">Dead in the<br>last few degrees</td><td class="n">Normal ADC roll-off — widen <code>POT_MV_MIN</code> / narrow <code>POT_MV_MAX</code> in <code>controls.h</code></td></tr>
+  <tr><td class="k">Dead in the<br>last few degrees</td><td class="n">Normal ADC roll-off — the end detent's cutoff is past where the knob reaches. Re-run the Project 16 tuner and give that knob its own profile in <code>DetentProfiles.h</code></td></tr>
   <tr><td class="k">Reads nothing<br>once WiFi is on</td><td class="n">A pot landed on an ADC2 pin. Move it to GPIO32–39</td></tr>
 </table>
 
