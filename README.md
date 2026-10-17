@@ -209,6 +209,27 @@ Two lines still print outside this. `DROPPED` is a fault rather than a state —
 
 That peak draw figure comes from FastLED's own `calculate_unscaled_power_mW`, so it is the number to watch against whatever supply you end up using — see below.
 
+### Live dashboard
+
+The same line can drive a page in the browser. `pio device monitor` keeps the serial port and your terminal exactly as before; a monitor filter, `monitor/filter_dashboard.py`, also sends each line as a UDP packet to a small Node service in `dashboard/`. The service turns the lines into one picture of the board and streams it to any open page.
+
+```bash
+node dashboard/server.js      # then open http://localhost:7778/
+pio device monitor            # in another terminal, as usual
+```
+
+![](./docs/monitor-dashboard.jpg)
+
+The filter is switched on in `platformio.ini` (`monitor_filters = default, dashboard`). It sends UDP so the monitor never waits on the dashboard, and never notices whether it is running: with nothing listening, the packets are simply dropped. The service has no dependencies, so there is no `npm install`, and it needs Node 18 or later.
+
+Across the top is a meter rack: one backlit, dual-scale meter per knob and one for the draw, each with a nixie readout. A knob meter reads the wiper voltage on its lower scale. That voltage is the raw count × 3.3 V / 4095, which is approximate, because the ESP32's ADC is not linear near its ends; the red zone marks where it flattens out. The upper scale shows the detent the knob is in, with the cutoffs as ticks and the hysteresis bands in amber. The draw meter shows amps above and watts at 5 V below, with a red zone from the supply limit you type in. The needles swing to each new reading with a CSS transition. The digits update at most twice a second. The build asks for a status line at least every 750 ms (`STORM_LOG_STATS=750`), so the meters keep moving even when nothing changes. The pilot lamp is red while lines are arriving and amber when the board goes quiet.
+
+Below the rack, the page shows the three knobs, with the raw readings plotted against the detent cutoffs from `DetentProfiles.h`, so a knob resting within the hysteresis band of a cutoff shows as being on the edge. It draws the cloud from the pixel coordinates in `layout.h` and lights each strike's tree in the current palette's colours. It also counts strikes per root channel, charts frame rate and peak draw over the last five minutes against a supply limit you type in, and keeps a tail of the raw serial. The segment table comes from `src/layout.h` until the board's boot banner provides its own.
+
+The page reads the stream with Server-Sent Events rather than a WebSocket: data only flows one way, and `EventSource` reconnects by itself. Ports are `STORM_DASH_UDP` (7777) and `STORM_DASH_HTTP` (7778). The page is served on localhost only unless `STORM_DASH_BIND=0.0.0.0`. The service also serves the bench at `/simulator`.
+
+To work on the page without a board, use `node dashboard/server.js --demo`, which runs a pretend board inside the service. `node dashboard/fake-bench.js` instead sends the pretend board's lines over UDP, the way the monitor filter does. `npm test` in `dashboard/` checks the parser against the formats in `storm.h`. If you change a `LOG()` format there, change `dashboard/public/parse.js` to match.
+
 ### Hardware notes
 
 **300 pixels will not fit on an AVR Nano.** The frame buffer alone is 900 bytes of a 2 KB budget, before strike state. Use an ESP32, Teensy, or RP2040.
@@ -294,7 +315,7 @@ So severity crossfades Distant ↔ Direct hit, and Heat lightning stays a separa
 ```bash
 pio run                 # compile
 pio run -t upload       # flash
-pio device monitor      # watch the log
+pio device monitor      # watch the log (and feed the live dashboard, if running)
 ```
 
 `platformio.ini` targets `esp32dev`. Re-exporting overwrites four of the five source files, but never `config.h` — so your pin choice, logging settings and palettes survive.
@@ -308,6 +329,13 @@ lightning-simulator/
 ├── index.html        the bench: routing, tuning, export
 ├── README.md         this file
 ├── platformio.ini    ESP32 build config
+├── monitor/
+│   └── filter_dashboard.py    copies monitor output to the dashboard over UDP
+├── dashboard/        live dashboard: Node service (no deps) + page
+│   ├── server.js     UDP in, Server-Sent Events out, serves the page
+│   ├── firmware.js   reads segments, palettes, cutoffs out of src/ and lib/
+│   ├── fake-bench.js pretend board for working without hardware
+│   └── public/       index.html, plus parse.js and state.js shared with the service
 ├── docs/
 │   ├── pot-wiring-card.html   bench reference; source for the published card
 │   ├── wiring-esp32.svg       full wiring diagram, DevKit V1 pinout
