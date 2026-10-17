@@ -1,0 +1,13 @@
+{
+  "name": "bolt-bench-dashboard",
+  "private": true,
+  "description": "Live dashboard for the bench, fed by the pio device monitor filter",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node server.js --demo",
+    "fake": "node fake-bench.js",
+    "test": "node --test"
+  }
+}
