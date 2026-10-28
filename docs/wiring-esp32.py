@@ -63,12 +63,12 @@ RIGHT = [
     ("RX0", "GPIO3",  "io"),
     ("D21", "GPIO21", "io"),
     ("D19", "GPIO19", "io"),
-    ("D18", "GPIO18", "io"),
+    ("D18", "GPIO18", "strip"),
     ("D5",  "GPIO5",  "io"),
     ("TX2", "GPIO17", "io"),
     ("RX2", "GPIO16", "io"),
     ("D4",  "GPIO4",  "io"),
-    ("D2",  "GPIO2",  "strip"),
+    ("D2",  "GPIO2",  "io"),
     ("D15", "GPIO15", "io"),
     ("GND", "GND",    "gnd"),
     ("3V3", "3V3 OUT", "v33"),
@@ -270,11 +270,13 @@ add(f'<path d="M520,{yv} l-12,-7 v14 z" fill="var(--v5)"/>')
 text(500, yv + 4, "+5V: USB or strip supply", "note", "end")
 
 # ── right side: strip, supply ──────────────────────────────────
-yd = py(11)
+ys = py(6)                     # D18
+yd = 652                       # the strip's DIN pad
+XD = 1230                      # data wire drops here, clear of the supply leads
 SX0, SX1 = 1290, 1500
-add(f'<path class="w" d="M{TAGR1},{yd} L{SX0},{yd}" style="stroke:var(--strip)"/>')
-res_h(1110, yd, "330 Ω")
-text(1190, yd - 12, "DIN", "val")
+add(f'<path class="w" d="M{TAGR1},{ys} L{XD},{ys} L{XD},{yd} L{SX0},{yd}" style="stroke:var(--strip)"/>')
+res_h(1110, ys, "330 Ω")
+text(XD + 10, yd - 8, "DIN", "val")
 
 # strip
 add(f'<rect class="part" x="{SX0}" y="570" width="{SX1-SX0}" height="164" rx="6"/>')
@@ -324,10 +326,10 @@ add(f'<path class="v33" d="M{TAGR1},{y33} L1090,{y33}" style="fill:none"/>')
 add(f'<path d="M1090,{y33} l0,-7 l12,7 l-12,7 z" fill="var(--v33)"/>')
 text(1044, y33 + 22, "to leg 3 of each pot", "note")
 
-# D2 note
-text(1044, 576, "GPIO2 also drives the", "note")
-text(1044, 590, "on-board blue LED, so it", "note")
-text(1044, 604, "flickers with data. Harmless.", "note")
+# why not D2
+text(1044, 576, "Not D2: it also drives", "note")
+text(1044, 590, "the blue on-board LED,", "note")
+text(1044, 604, "which loads the data line.", "note")
 
 # ── legend ─────────────────────────────────────────────────────
 LY = 930
@@ -335,7 +337,7 @@ add(f'<line x1="30" y1="{LY-20}" x2="{W-30}" y2="{LY-20}" stroke="var(--rule)" s
 items = [("var(--pot)", "Pots: palette D32, speed D33, level D34"),
          ("var(--mood)", "Mood LED: R D25, G D26, B D13"),
          ("var(--chaos)", "Chaos button: D27"),
-         ("var(--strip)", "Strip data: D2"),
+         ("var(--strip)", "Strip data: D18"),
          ("var(--v33)", "3.3 V"), ("var(--v5)", "5 V"), ("var(--gnd)", "Ground")]
 x = 30
 for col, lab in items:

@@ -1,6 +1,6 @@
 # Bolt Bench
 
-A browser bench for designing lightning animations on a 300-pixel addressable LED strip, and for exporting the result as a FastLED sketch that runs the same math.
+A browser bench for designing lightning animations on a 300-pixel addressable LED strip, and for exporting the result as an ESP32 sketch that runs the same math.
 
 Built for a wearable cloud costume: an LED rope stuffed into polyfill batting, with bolts hanging below.
 
@@ -165,7 +165,7 @@ Four presets — Distant storm, Rolling, Direct hit, Heat lightning — are star
 
 ## Export
 
-The **Export** panel emits five source files plus the layout. They are split along the line of **ownership**, not by size — which is what makes re-exporting safe:
+The **Export** panel emits seven source files plus the layout. They are split along the line of **ownership**, not by size — which is what makes re-exporting safe:
 
 | File | Owner | Overwritten on export |
 |---|---|---|
@@ -173,10 +173,13 @@ The **Export** panel emits five source files plus the layout. They are split alo
 | `controls.h` | **you** — pot pins and mapping | never; starter only |
 | `layout.h` | generator — segments, `LED_X`/`LED_Y` | wholesale |
 | `tuning.h` | generator — animation parameters | wholesale |
-| `storm.h` | generator — the engine | wholesale |
+| `storm.h` | generator — the engine: renders each frame into `leds[]` | wholesale |
+| `strip.h` | generator — the output: brightness, white balance, power cap, the wire | wholesale |
 | `main.cpp` | generator — `setup()` / `loop()` | wholesale |
 
-Drop the four generated files into `src/` after any export; leave your `config.h` alone.
+Drop the five generated files into `src/` after any export; leave your `config.h` and `controls.h` alone.
+
+**The colour math is FastLED's; the driver is not.** `storm.h` uses FastLED's `lib8tion`, `CRGB` and `hsv2rgb_rainbow`, because the bench transcribes them bit for bit. `strip.h` sends the frame with Adafruit NeoPixel. FastLED 3.10's ESP32 output lit the right number of pixels on this board, but every colour came out white; NeoPixel on the same board and strand showed the colours correctly. FastLED is pinned in `platformio.ini` so the math cannot drift under the bench.
 
 `layout.json` round-trips back into the tool via **Import layout JSON**, so you can version your routing or move it between machines.
 
@@ -207,7 +210,28 @@ Fields are fixed-width on purpose. A dashboard whose columns jump around is unre
 
 Two lines still print outside this. `DROPPED` is a fault rather than a state — it means the storm is scheduling faster than `MAX_STRIKES` can render — and the boot banner dumps the segment table once so you can check the firmware's idea of the routing against the bench's.
 
-That peak draw figure comes from FastLED's own `calculate_unscaled_power_mW`, so it is the number to watch against whatever supply you end up using — see below.
+The `mA` figure is the peak draw since the previous line, measured on what `strip.h` actually sends, after brightness, white balance and any cap. It uses FastLED's per-channel power model, so it is the number to watch against whatever supply you end up using — see below.
+
+### Live dashboard
+
+The same line can drive a page in the browser. `pio device monitor` keeps the serial port and your terminal exactly as before; a monitor filter, `monitor/filter_dashboard.py`, also sends each line as a UDP packet to a small Node service in `dashboard/`. The service turns the lines into one picture of the board and streams it to any open page.
+
+```bash
+node dashboard/server.js      # then open http://localhost:7778/
+pio device monitor            # in another terminal, as usual
+```
+
+![](./docs/monitor-dashboard.jpg)
+
+The filter is switched on in `platformio.ini` (`monitor_filters = default, dashboard`). It sends UDP so the monitor never waits on the dashboard, and never notices whether it is running: with nothing listening, the packets are simply dropped. The service has no dependencies, so there is no `npm install`, and it needs Node 18 or later.
+
+Across the top is a meter rack: one backlit, dual-scale meter per knob and one for the draw, each with a nixie readout. A knob meter reads the wiper voltage on its lower scale. That voltage is the raw count × 3.3 V / 4095, which is approximate, because the ESP32's ADC is not linear near its ends; the red zone marks where it flattens out. The upper scale shows the detent the knob is in, with the cutoffs as ticks and the hysteresis bands in amber. The draw meter shows amps above and watts at 5 V below, with a red zone from the supply limit you type in. The needles swing to each new reading with a CSS transition. The digits update at most twice a second. The build asks for a status line at least every 750 ms (`STORM_LOG_STATS=750`), so the meters keep moving even when nothing changes. The pilot lamp is red while lines are arriving and amber when the board goes quiet.
+
+Below the rack, the page shows the three knobs, with the raw readings plotted against the detent cutoffs from `DetentProfiles.h`, so a knob resting within the hysteresis band of a cutoff shows as being on the edge. It draws the cloud from the pixel coordinates in `layout.h` and lights each strike's tree in the current palette's colours. It also counts strikes per root channel, charts frame rate and peak draw over the last five minutes against a supply limit you type in, and keeps a tail of the raw serial. The segment table comes from `src/layout.h` until the board's boot banner provides its own.
+
+The page reads the stream with Server-Sent Events rather than a WebSocket: data only flows one way, and `EventSource` reconnects by itself. Ports are `STORM_DASH_UDP` (7777) and `STORM_DASH_HTTP` (7778). The page is served on localhost only unless `STORM_DASH_BIND=0.0.0.0`. The service also serves the bench at `/simulator`.
+
+To work on the page without a board, use `node dashboard/server.js --demo`, which runs a pretend board inside the service. `node dashboard/fake-bench.js` instead sends the pretend board's lines over UDP, the way the monitor filter does. `npm test` in `dashboard/` checks the parser against the formats in `storm.h`. If you change a `LOG()` format there, change `dashboard/public/parse.js` to match.
 
 ### Hardware notes
 
@@ -217,18 +241,18 @@ That peak draw figure comes from FastLED's own `calculate_unscaled_power_mW`, so
 
 What that means in practice:
 
-- Cap the draw with `FastLED.setMaxPowerInVoltsAndMilliamps(5, N)` rather than trusting the animation to behave. This is the single most useful line you can add.
+- Cap the draw with `LED_MAX_MA` in `config.h` rather than trusting the animation to behave. A frame that would draw more is dimmed as a whole to fit. It ships at `0` (no cap); set it to what your supply delivers. This is the single most useful line you can change.
 - Inject power at both ends of the strip, and at the midpoint if you can reach it.
 - Put a 1000 µF electrolytic across 5 V and ground at the strip, and a 330–470 Ω resistor in series with the data line.
 - Level-shift 3.3 V data up to 5 V on ESP32 and RP2040.
 
 A sagging supply does not fail cleanly — it produces glitching and colour corruption that looks exactly like a software bug, and will cost you an evening.
 
-Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top of the sketch.
+The strip is on `GPIO18` (`LED_PIN`), WS2812B with `GRB` order (`LED_TYPE`), in `config.h`. Not GPIO2: that pin also drives the DevKit's on-board blue LED, which loads the data line, and it is a boot strapping pin.
 
 ## Known limits
 
-- **The sketch compiles but has never run on hardware.** `pio run` succeeds clean for `esp32dev` with FastLED 3.9 — no warnings — so the syntax and API use are verified. Timing, colour and the power figures are still unproven on real pixels.
+- **Dithering is gone with FastLED's driver.** FastLED's `show()` added temporal dithering at low brightness; NeoPixel does not, so the dimmest fades step slightly more coarsely than they did.
 - Fork nesting is capped at depth 3, in both the preview and the sketch.
 - `MAX_STRIKES` is 6 and `MAX_STROKES` is 6. Push the storm parameters hard enough and strikes will be dropped rather than queued.
 - Preview-only controls — dot size, bloom — model light diffusing through batting. They are not exported, because the controller has no equivalent.
@@ -294,10 +318,10 @@ So severity crossfades Distant ↔ Direct hit, and Heat lightning stays a separa
 ```bash
 pio run                 # compile
 pio run -t upload       # flash
-pio device monitor      # watch the log
+pio device monitor      # watch the log (and feed the live dashboard, if running)
 ```
 
-`platformio.ini` targets `esp32dev`. Re-exporting overwrites four of the five source files, but never `config.h` — so your pin choice, logging settings and palettes survive.
+`platformio.ini` targets `esp32dev`. Re-exporting overwrites five of the seven source files, but never `config.h` or `controls.h` — so your pin choice, logging settings, palettes and knobs survive.
 
 ## Files
 
@@ -308,6 +332,13 @@ lightning-simulator/
 ├── index.html        the bench: routing, tuning, export
 ├── README.md         this file
 ├── platformio.ini    ESP32 build config
+├── monitor/
+│   └── filter_dashboard.py    copies monitor output to the dashboard over UDP
+├── dashboard/        live dashboard: Node service (no deps) + page
+│   ├── server.js     UDP in, Server-Sent Events out, serves the page
+│   ├── firmware.js   reads segments, palettes, cutoffs out of src/ and lib/
+│   ├── fake-bench.js pretend board for working without hardware
+│   └── public/       index.html, plus parse.js and state.js shared with the service
 ├── docs/
 │   ├── pot-wiring-card.html   bench reference; source for the published card
 │   ├── wiring-esp32.svg       full wiring diagram, DevKit V1 pinout
@@ -320,7 +351,8 @@ lightning-simulator/
     ├── controls.h    YOURS: potentiometer pins and mapping — never regenerated
     ├── layout.h      generated: segment table, pixel coordinates
     ├── tuning.h      generated: animation parameters and palette
-    ├── storm.h       generated: the engine
+    ├── storm.h       generated: the engine, renders each frame into leds[]
+    ├── strip.h       generated: sends leds[] to the strip (NeoPixel)
     ├── main.cpp      generated: setup() and loop()
     └── layout.json   exported routing, re-importable into the bench
 ```

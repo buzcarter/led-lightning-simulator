@@ -27,3 +27,6 @@ tmp/
 build/
 *.hex
 *.elf
+
+# Python (the PlatformIO monitor filter)
+__pycache__/

@@ -177,8 +177,8 @@
 <line class="w" x1="912" y1="442" x2="938" y2="442"/>
 <rect class="pin" x="906" y="436" width="12" height="12" rx="2"/>
 <text class="silk" x="898" y="446.5" text-anchor="end">D18</text>
-<rect class="tag" x="938" y="430" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)"/>
-<text class="tag-t" x="983.0" y="446" text-anchor="middle" style="fill:var(--ink2)">GPIO18</text>
+<rect class="tag" x="938" y="430" width="90" height="24" rx="12" fill="var(--strip)" stroke="var(--strip)"/>
+<text class="tag-t" x="983.0" y="446" text-anchor="middle" style="fill:#fff">GPIO18</text>
 <line class="w" x1="912" y1="484" x2="938" y2="484"/>
 <rect class="pin" x="906" y="478" width="12" height="12" rx="2"/>
 <text class="silk" x="898" y="488.5" text-anchor="end">D5</text>
@@ -202,8 +202,8 @@
 <line class="w" x1="912" y1="652" x2="938" y2="652"/>
 <rect class="pin" x="906" y="646" width="12" height="12" rx="2"/>
 <text class="silk" x="898" y="656.5" text-anchor="end">D2</text>
-<rect class="tag" x="938" y="640" width="90" height="24" rx="12" fill="var(--strip)" stroke="var(--strip)"/>
-<text class="tag-t" x="983.0" y="656" text-anchor="middle" style="fill:#fff">GPIO2</text>
+<rect class="tag" x="938" y="640" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)"/>
+<text class="tag-t" x="983.0" y="656" text-anchor="middle" style="fill:var(--ink2)">GPIO2</text>
 <line class="w" x1="912" y1="694" x2="938" y2="694"/>
 <rect class="pin" x="906" y="688" width="12" height="12" rx="2"/>
 <text class="silk" x="898" y="698.5" text-anchor="end">D15</text>
@@ -372,10 +372,10 @@
 <path class="v5" d="M572,778 L520,778" style="fill:none"/>
 <path d="M520,778 l-12,-7 v14 z" fill="var(--v5)"/>
 <text class="note" x="500" y="782" text-anchor="end">+5V: USB or strip supply</text>
-<path class="w" d="M1028,652 L1290,652" style="stroke:var(--strip)"/>
-<rect class="part" x="1084.0" y="644" width="52" height="16" rx="2"/>
-<text class="val" x="1110" y="639" text-anchor="middle">330 Ω</text>
-<text class="val" x="1190" y="640" text-anchor="start">DIN</text>
+<path class="w" d="M1028,442 L1230,442 L1230,652 L1290,652" style="stroke:var(--strip)"/>
+<rect class="part" x="1084.0" y="434" width="52" height="16" rx="2"/>
+<text class="val" x="1110" y="429" text-anchor="middle">330 Ω</text>
+<text class="val" x="1240" y="644" text-anchor="start">DIN</text>
 <rect class="part" x="1290" y="570" width="210" height="164" rx="6"/>
 <rect x="1284" y="594" width="12" height="12" rx="2" fill="#c9a74a" stroke="#7d6420"/>
 <text class="t" x="1304" y="604" text-anchor="start">+5V</text>
@@ -423,9 +423,9 @@
 <path class="v33" d="M1028,778 L1090,778" style="fill:none"/>
 <path d="M1090,778 l0,-7 l12,7 l-12,7 z" fill="var(--v33)"/>
 <text class="note" x="1044" y="800" text-anchor="start">to leg 3 of each pot</text>
-<text class="note" x="1044" y="576" text-anchor="start">GPIO2 also drives the</text>
-<text class="note" x="1044" y="590" text-anchor="start">on-board blue LED, so it</text>
-<text class="note" x="1044" y="604" text-anchor="start">flickers with data. Harmless.</text>
+<text class="note" x="1044" y="576" text-anchor="start">Not D2: it also drives</text>
+<text class="note" x="1044" y="590" text-anchor="start">the blue on-board LED,</text>
+<text class="note" x="1044" y="604" text-anchor="start">which loads the data line.</text>
 <line x1="30" y1="910" x2="1530" y2="910" stroke="var(--rule)" stroke-width="1"/>
 <rect x="30" y="920" width="22" height="14" rx="7" fill="var(--pot)"/>
 <text class="t" x="60" y="932" text-anchor="start">Pots: palette D32, speed D33, level D34</text>
@@ -434,13 +434,13 @@
 <rect x="606.4" y="920" width="22" height="14" rx="7" fill="var(--chaos)"/>
 <text class="t" x="636.4" y="932" text-anchor="start">Chaos button: D27</text>
 <rect x="770.5" y="920" width="22" height="14" rx="7" fill="var(--strip)"/>
-<text class="t" x="800.5" y="932" text-anchor="start">Strip data: D2</text>
-<rect x="912.7" y="920" width="22" height="14" rx="7" fill="var(--v33)"/>
-<text class="t" x="942.7" y="932" text-anchor="start">3.3 V</text>
-<rect x="989.2" y="920" width="22" height="14" rx="7" fill="var(--v5)"/>
-<text class="t" x="1019.2" y="932" text-anchor="start">5 V</text>
-<rect x="1051.1000000000001" y="920" width="22" height="14" rx="7" fill="var(--gnd)"/>
-<text class="t" x="1081.1000000000001" y="932" text-anchor="start">Ground</text>
+<text class="t" x="800.5" y="932" text-anchor="start">Strip data: D18</text>
+<rect x="920.0" y="920" width="22" height="14" rx="7" fill="var(--v33)"/>
+<text class="t" x="950.0" y="932" text-anchor="start">3.3 V</text>
+<rect x="996.5" y="920" width="22" height="14" rx="7" fill="var(--v5)"/>
+<text class="t" x="1026.5" y="932" text-anchor="start">5 V</text>
+<rect x="1058.4" y="920" width="22" height="14" rx="7" fill="var(--gnd)"/>
+<text class="t" x="1088.4" y="932" text-anchor="start">Ground</text>
 <rect x="30" y="948" width="22" height="14" rx="7" fill="var(--bg)" stroke="var(--io)" stroke-dasharray="4 3"/>
 <text class="t" x="60" y="960" text-anchor="start">Input only (GPIO34–39): no output, no internal pull-up. Fine for pots, wrong for the button.</text>
 <line class="w" x1="30" y1="976" x2="52" y2="976"/>

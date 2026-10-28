@@ -9,15 +9,23 @@
 #include <Arduino.h>
 
 /* ── strip ──────────────────────────────────────────────────── */
-/* GPIO2 is a strapping pin, but strapping pins are only sampled at reset —
-   after boot it is an ordinary output, which is why this works. The one
-   risk is something holding it high during reset and blocking boot.
-   If you ever need to move it: GPIO13/18/19/21/22/23/25/26/27/32/33 are
-   all clear. Avoid GPIO6-11 (SPI flash), GPIO34-39 (input only),
-   GPIO1/3 (Serial), GPIO16/17 (PSRAM on WROVER modules). */
-#define LED_PIN      GPIO_NUM_2
-#define LED_TYPE     WS2812B
-#define COLOR_ORDER  GRB
+/* GPIO18 is free of every complication. Not GPIO2: it is a strapping pin
+   and it also drives the DevKit's on-board blue LED, which loads the data
+   line. Other clear choices: GPIO19/21/22/23. Avoid GPIO6-11 (SPI flash),
+   GPIO34-39 (input only), GPIO1/3 (Serial), GPIO16/17 (PSRAM on WROVER
+   modules), and the pins controls.h already uses. */
+#define LED_PIN         GPIO_NUM_18
+#define LED_TYPE        (NEO_GRB + NEO_KHZ800)   // WS2812B: GRB byte order, 800 kHz
+
+/* White balance for the pixels, applied after brightness. FastLED's
+   TypicalLEDStrip (255, 176, 240) pulls back the green that strip pixels
+   overdo. UncorrectedColor turns it off. */
+#define LED_CORRECTION  TypicalLEDStrip
+
+/* Power cap in mA at 5 V, for the strip alone. 0 = no cap. 300 px at full
+   white is about 18 A, and this animation really does flash most of the
+   cloud at once; set this to what your supply can deliver. */
+#define LED_MAX_MA      0
 
 /* How many strikes may overlap, and how many strokes each may have.
    Exceeding MAX_STRIKES logs a DROPPED line rather than queueing. */
@@ -25,8 +33,8 @@
 #define MAX_STROKES  6
 
 /* ── logging ────────────────────────────────────────────────── */
-/* 0 removes Serial, the format strings and the per-frame power
-   measurement entirely — about 28 KB of flash on an ESP32.
+/* 0 removes Serial and the format strings entirely — about 28 KB of
+   flash on an ESP32.
    Override from platformio.ini with -DSTORM_LOG=0. */
 #ifndef STORM_LOG
   #define STORM_LOG      1

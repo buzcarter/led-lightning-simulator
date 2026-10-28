@@ -373,7 +373,11 @@
     "cloudMs": 1300,
     "rumble": 150,
     "master": 170,
-    "tint": 19,
+    "hue": 160,
+    "hotHue": 160,
+    "sat": 19,
+    "hotSat": 0,
+    "trim": 255,
     "dotSize": 28,
     "bloom": 161
   }

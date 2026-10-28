@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bolt Bench Live</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500;600&family=Nixie+One&display=swap">
+<style>
+/* tokens shared with the simulator (../index.html) */
+:root{
+  --void:#080b11;
+  --stage:#0b0f17;
+  --panel:#131926;
+  --raise:#1b2231;
+  --raise-hi:#232c3d;
+  --line:#28313f;
+  --line-soft:#1c2431;
+  --ink:#e2e8f4;
+  --dim:#8794a9;
+  --faint:#5c6879;
+  --volt:#82c8ff;
+  --volt-deep:#3a7fb8;
+  --armed:#f0a94c;
+  --live:#63d69a;
+  --fault:#ff7a6b;
+  --cool:#3a7fb8;      /* the current palette, set from script */
+  --hot:#eaf5ff;
+  --ui:"Archivo","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+body{
+  margin:0;background:var(--void);color:var(--ink);
+  font-family:var(--ui);font-size:13px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
+a{color:var(--volt);text-decoration:none}
+a:hover{text-decoration:underline}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition-duration:0.01ms!important}}
+
+/* ── rail ─────────────────────────────────────────────── */
+.rail{
+  position:sticky;top:0;z-index:5;
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding:10px 16px;min-height:52px;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+.mark{display:flex;align-items:baseline;gap:9px;flex:none}
+.mark b{font-weight:700;font-stretch:118%;letter-spacing:.055em;font-size:16px;text-transform:uppercase}
+.mark span{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.08em}
+.sep{width:1px;height:26px;background:var(--line);flex:none}
+.conn{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--dim);
+}
+.conn i{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+.conn[data-s=live] i{background:var(--live);box-shadow:0 0 0 0 var(--live);animation:beat 2s infinite}
+.conn[data-s=live]{color:var(--live)}
+.conn[data-s=quiet] i,.conn[data-s=waiting] i{background:var(--armed)}
+.conn[data-s=quiet],.conn[data-s=waiting]{color:var(--armed)}
+.conn[data-s=down] i{background:var(--fault)}
+.conn[data-s=down]{color:var(--fault)}
+@keyframes beat{0%{box-shadow:0 0 0 0 rgba(99,214,154,.55)}70%{box-shadow:0 0 0 7px rgba(99,214,154,0)}100%{box-shadow:0 0 0 0 rgba(99,214,154,0)}}
+.meta{font-family:var(--mono);font-size:11px;color:var(--faint);display:flex;gap:14px;flex-wrap:wrap}
+.meta b{color:var(--dim);font-weight:500}
+.rail .end{margin-left:auto;display:flex;align-items:center;gap:14px}
+.drops{
+  font-family:var(--mono);font-size:11px;color:var(--armed);
+  border:1px solid #5b4622;background:#2a2113;border-radius:3px;padding:3px 8px;
+}
+.drops[hidden]{display:none}
+
+/* ── layout ───────────────────────────────────────────── */
+.main{
+  display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;
+  padding:16px;max-width:1440px;margin:0 auto;
+}
+.card{
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;
+  padding:14px 16px;min-width:0;position:relative;
+}
+.card h2{
+  margin:0 0 10px;display:flex;align-items:baseline;gap:10px;
+  font-family:var(--mono);font-size:10px;font-weight:500;color:var(--faint);
+  text-transform:uppercase;letter-spacing:.11em;
+}
+.card h2 small{margin-left:auto;text-transform:none;letter-spacing:.02em;font-size:10px}
+.knob{grid-column:span 4}
+.sky{grid-column:span 8}
+.channels{grid-column:span 4}
+.chart{grid-column:span 6}
+.console{grid-column:span 12}
+@media (max-width:1000px){.sky,.channels,.chart{grid-column:span 12}}
+@media (max-width:760px){.knob{grid-column:span 12}.main{padding:12px 16px}.rail{position:static}}
+
+/* ── knobs ────────────────────────────────────────────── */
+.big{
+  font-weight:650;font-stretch:112%;font-size:34px;line-height:1.05;letter-spacing:.005em;
+  display:flex;align-items:baseline;gap:10px;min-height:38px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.big em{font-style:normal;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--faint);letter-spacing:.06em}
+.big.none{color:var(--faint)}
+.bump{animation:bump .6s ease-out}
+@keyframes bump{0%{color:var(--volt)}100%{}}
+.knob.chaos{border-color:#5b4622;box-shadow:inset 0 0 0 1px #5b4622}
+.knob.chaos .big{color:var(--armed);animation:chaos .5s steps(2) infinite}
+@keyframes chaos{50%{opacity:.6}}
+
+.pips{display:flex;gap:4px;margin:12px 0 4px}
+.pips i{flex:1;height:6px;border-radius:2px;background:var(--raise-hi)}
+.pips i.on{background:var(--volt)}
+.pips i.past{background:var(--volt-deep)}
+.knob.chaos .pips i.on,.knob.chaos .pips i.past{background:var(--armed)}
+
+.swatch{height:6px;border-radius:2px;margin:12px 0 4px;background:linear-gradient(90deg,var(--cool),var(--hot));transition:background .3s}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.chips span{
+  font-family:var(--mono);font-size:10px;color:var(--faint);
+  border:1px solid var(--line-soft);border-radius:3px;padding:1px 6px;
+}
+.chips span.on{color:var(--ink);border-color:var(--volt-deep);background:var(--raise)}
+
+.raw{margin-top:12px}
+.raw .track{position:relative;height:14px;background:var(--stage);border:1px solid var(--line-soft);border-radius:3px}
+.raw .band{position:absolute;top:0;bottom:0;background:rgba(240,169,76,.12)}
+.raw .cut{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+.raw .dot{
+  position:absolute;top:-3px;bottom:-3px;width:3px;margin-left:-1px;border-radius:1px;
+  background:var(--ink);transition:left .15s ease-out;
+}
+.raw.edge .dot{background:var(--armed)}
+.raw .read{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:10px;color:var(--faint)}
+.raw .read b{color:var(--dim);font-weight:500}
+.raw.edge .read .warn{color:var(--armed)}
+.raw.off .track{opacity:.4}
+
+/* ── sky ──────────────────────────────────────────────── */
+.skybox{position:relative;background:var(--stage);border:1px solid var(--line-soft);border-radius:4px;overflow:hidden}
+.skybox svg{display:block;width:100%;height:auto;max-height:420px}
+.skybox .seg circle{fill:var(--faint);transition:fill .5s,opacity .5s}
+.skybox .seg.cloud circle{fill:#39465a}
+.skybox .seg.bolt circle,.skybox .seg.fork circle{fill:#2b3546}
+.skybox .seg.lit circle{fill:var(--hot);transition:none}
+.skybox .seg.lit{filter:url(#glow)}
+.skybox .seg.cloud.lit circle{fill:var(--cool)}
+.skybox .label{font-family:var(--mono);font-size:6px;fill:var(--faint);letter-spacing:.04em}
+.skybox .seg.lit + .label,.skybox .label.lit{fill:var(--ink)}
+.skynote{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;
+  background:rgba(8,11,17,.72);text-align:center;padding:16px;color:var(--dim);
+}
+.skynote[hidden]{display:none}
+.skynote code{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--raise);padding:3px 8px;border-radius:3px}
+.skynote small{font-family:var(--mono);font-size:10px;color:var(--faint)}
+.now{display:flex;align-items:baseline;gap:10px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.now b{font-family:var(--ui);font-size:15px;font-weight:600;color:var(--ink);letter-spacing:.01em}
+.now b.quiet{color:var(--faint);font-weight:500}
+
+/* ── channels ─────────────────────────────────────────── */
+.chan{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:7px 0;border-bottom:1px solid var(--line-soft)}
+.chan:last-of-type{border-bottom:0}
+.chan .nm{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chan .ct{font-family:var(--mono);font-size:12px;color:var(--ink);text-align:right}
+.chan .bar{grid-column:1/-1;height:3px;background:var(--raise);border-radius:2px;overflow:hidden}
+.chan .bar i{display:block;height:100%;background:var(--volt-deep);transition:width .3s}
+.chan.lit .bar i{background:var(--hot)}
+.chan.lit .nm{color:var(--hot)}
+.chan .sub{grid-column:1/-1;font-family:var(--mono);font-size:10px;color:var(--faint)}
+.recent{margin-top:14px}
+.recent h3{margin:0 0 6px;font-family:var(--mono);font-size:10px;font-weight:500;color:var(--faint);text-transform:uppercase;letter-spacing:.11em}
+.recent ol{list-style:none;margin:0;padding:0;font-family:var(--mono);font-size:11px}
+.recent li{display:flex;justify-content:space-between;gap:10px;padding:2px 0;color:var(--dim)}
+.recent li:first-child{color:var(--ink)}
+.recent li span:last-child{color:var(--faint)}
+.empty{font-family:var(--mono);font-size:11px;color:var(--faint);padding:6px 0}
+
+/* ── charts ───────────────────────────────────────────── */
+.chart .readout{display:flex;align-items:baseline;gap:16px;margin-bottom:8px;flex-wrap:wrap}
+.chart .readout b{font-family:var(--mono);font-size:24px;font-weight:500;letter-spacing:-.01em}
+.chart .readout b small{font-size:11px;color:var(--faint);margin-left:3px}
+.chart .readout span{font-family:var(--mono);font-size:10px;color:var(--faint)}
+.chart .readout span em{font-style:normal;color:var(--dim)}
+.chart canvas{display:block;width:100%;height:150px}
+.budget{display:flex;align-items:center;gap:6px;margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint)}
+.budget input{
+  width:64px;background:var(--stage);border:1px solid var(--line);border-radius:3px;
+  padding:2px 6px;font-family:var(--mono);font-size:11px;text-align:right;
+}
+.over{color:var(--armed)!important}
+
+/* ── meter rack ───────────────────────────────────────────
+   Brushed panel, backlit dual-scale meters, nixie readouts. The needles ride
+   a CSS transition with a little overshoot, so a new reading swings in the
+   way a moving-coil meter does rather than jumping. */
+.rack{
+  grid-column:span 12;position:relative;border-radius:8px;
+  padding:30px 38px 26px;
+  background:
+    repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,rgba(0,0,0,.045) 1px 2px,transparent 2px 3px),
+    linear-gradient(100deg,#868a90 0%,#c4c8cd 20%,#979ba1 42%,#d3d6da 63%,#a3a7ac 80%,#83878c 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -2px 0 rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.55);
+}
+.screw{
+  position:absolute;width:15px;height:15px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#f2f3f4,#9a9ea3 55%,#5d6166);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.45),0 1px 0 rgba(255,255,255,.6);
+}
+.screw::before,.screw::after{content:"";position:absolute;left:50%;top:50%;width:9px;height:2px;margin:-1px 0 0 -4.5px;background:#2a2c30;border-radius:1px}
+.screw::after{transform:rotate(90deg)}
+.screw.a{left:10px;top:10px;transform:rotate(17deg)}
+.screw.b{right:10px;top:10px;transform:rotate(-31deg)}
+.screw.c{left:10px;bottom:10px;transform:rotate(52deg)}
+.screw.d{right:10px;bottom:10px;transform:rotate(8deg)}
+.pilot{
+  position:absolute;left:38px;top:10px;display:flex;align-items:center;gap:8px;
+  font:600 9px/1 var(--ui);font-stretch:125%;letter-spacing:.24em;color:#2b2e33;
+  text-shadow:0 1px 0 rgba(255,255,255,.55);
+}
+.pilot i{
+  width:9px;height:9px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#7a3a33,#3a1612);box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
+}
+.pilot[data-s=live] i{background:radial-gradient(circle at 35% 30%,#ffd2c0,#ff3b1f 45%,#a8160a);box-shadow:0 0 6px 2px rgba(255,60,30,.75),0 0 16px 4px rgba(255,60,30,.35)}
+.pilot[data-s=quiet] i,.pilot[data-s=waiting] i{background:radial-gradient(circle at 35% 30%,#ffe7b8,#f0a13a 45%,#94560c);box-shadow:0 0 6px 2px rgba(240,161,58,.6)}
+.meters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px 26px}
+@media (max-width:1100px){.meters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.meters{grid-template-columns:minmax(0,1fr)}.rack{padding:30px 20px 24px}}
+.meter{display:flex;flex-direction:column;align-items:center;min-width:0}
+.meter svg{display:block;width:100%;height:auto;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
+.meter .bezel{fill:#18181a;stroke:#050506;stroke-width:1}
+.meter .rim{fill:none;stroke:rgba(0,0,0,.55);stroke-width:3}
+.meter .ink{stroke:#3a2812;fill:none}
+.meter .lbl{fill:#3a2812;font-family:var(--ui);font-stretch:80%;font-weight:600;text-anchor:middle;dominant-baseline:middle}
+.meter .unit{fill:#5a4422;font-family:var(--ui);font-stretch:125%;font-weight:700;font-size:13px;letter-spacing:.12em;text-anchor:middle;opacity:.8}
+.meter .hand{stroke:#151008;stroke-width:1.5;stroke-linecap:round}
+.meter .hand-shadow{stroke:rgba(40,25,5,.22);stroke-width:2.2;stroke-linecap:round}
+.meter .needle{transform-origin:120px 175px;transition:transform .75s cubic-bezier(.25,1.3,.5,1)}
+.meter .dim{fill:#0a0806;opacity:0;transition:opacity .6s}
+.meter.off .dim{opacity:.58}
+.plate{
+  margin-top:12px;display:flex;align-items:center;gap:10px;
+  font:600 10px/1 var(--ui);font-stretch:125%;letter-spacing:.22em;text-transform:uppercase;
+  color:#26292e;text-shadow:0 1px 0 rgba(255,255,255,.55);
+}
+.plate em{font-style:normal;font-size:12px;letter-spacing:.05em}
+.nixies{
+  display:flex;gap:3px;padding:5px 6px;border-radius:6px;background:#0b0705;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.6);
+}
+.tube{
+  position:relative;width:27px;height:42px;border-radius:11px 11px 5px 5px;overflow:hidden;
+  background:
+    radial-gradient(circle,rgba(255,150,60,.10) .8px,transparent 1.1px) 0 0/4px 4px,
+    linear-gradient(90deg,rgba(255,255,255,.06),rgba(255,255,255,0) 35%,rgba(255,255,255,0) 70%,rgba(255,255,255,.05)),
+    #160c07;
+  box-shadow:inset 0 0 0 1px #3b2a1f,inset 0 -6px 10px rgba(255,90,0,.06);
+}
+.tube b{position:absolute;inset:0;display:grid;place-items:center;font:400 32px/1 "Nixie One",var(--mono);padding-top:3px}
+.tube .ghost{color:rgba(255,170,90,.03)}
+.tube .d{color:#ffd9a0;text-shadow:0 0 2px #ffa040,0 0 6px #ff7a10,0 0 14px rgba(255,90,0,.75)}
+.tube .d.flick{animation:flick .22s linear}
+@keyframes flick{0%{opacity:.15}35%{opacity:1}50%{opacity:.55}100%{opacity:1}}
+.tube .dp{position:absolute;right:2px;bottom:6px;width:4px;height:4px;border-radius:50%;background:#2e1a10}
+.tube .dp.on{background:#ffd9a0;box-shadow:0 0 3px #ff8a20,0 0 8px rgba(255,90,0,.8)}
+
+/* ── console ──────────────────────────────────────────── */
+.console label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.log{
+  height:260px;overflow:auto;background:var(--stage);border:1px solid var(--line-soft);border-radius:4px;
+  padding:8px 10px;font-family:var(--mono);font-size:11px;line-height:1.55;
+}
+.log div{white-space:pre;color:var(--dim)}
+.log div time{color:var(--faint);margin-right:10px}
+.log div.status{color:var(--faint)}
+.log div.dropped{color:var(--armed)}
+.log div.boot{color:var(--volt)}
+.log.nostatus div.status{display:none}
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <div class="mark"><b>Bolt Bench</b><span>LIVE</span></div>
+  <div class="sep"></div>
+  <div class="conn" id="conn" data-s="connecting"><i></i><span id="connText">connecting…</span></div>
+  <div class="meta" id="meta"></div>
+  <div class="end">
+    <span class="drops" id="drops" hidden></span>
+    <a href="/simulator">Simulator →</a>
+  </div>
+</header>
+
+<main class="main">
+  <section class="rack" aria-label="Meters">
+    <span class="screw a"></span><span class="screw b"></span><span class="screw c"></span><span class="screw d"></span>
+    <div class="pilot" id="pilot"><i></i>POWER</div>
+    <div class="meters" id="meters"></div>
+  </section>
+  <section class="card knob" id="kPalette">
+    <h2>Palette <small id="palIdx"></small></h2>
+    <div class="big none" id="palVal">—</div>
+    <div class="swatch"></div>
+    <div class="chips" id="palChips"></div>
+    <div class="raw off" id="raw0"></div>
+  </section>
+
+  <section class="card knob" id="kSpeed">
+    <h2>Speed <small>storm clock</small></h2>
+    <div class="big none" id="spdVal">—</div>
+    <div class="pips" id="spdPips"></div>
+    <div class="raw off" id="raw1"></div>
+  </section>
+
+  <section class="card knob" id="kLevel">
+    <h2>Level <small>intensity</small></h2>
+    <div class="big none" id="lvlVal">—</div>
+    <div class="pips" id="lvlPips"></div>
+    <div class="raw off" id="raw2"></div>
+  </section>
+
+  <section class="card sky">
+    <h2>Sky <small id="segFrom"></small></h2>
+    <div class="skybox">
+      <svg id="skySvg" role="img" aria-label="Pixel map of the cloud and bolts"></svg>
+      <div class="skynote" id="skyNote" hidden></div>
+    </div>
+    <div class="now"><span>strike</span><b id="nowStrike" class="quiet">—</b><span id="nowAge"></span></div>
+  </section>
+
+  <section class="card channels">
+    <h2>Channels <small id="chanTotal"></small></h2>
+    <div id="chanList"></div>
+    <div class="recent">
+      <h3>Recent</h3>
+      <ol id="recent"></ol>
+    </div>
+  </section>
+
+  <section class="card chart">
+    <h2>Frame rate <small>per line</small></h2>
+    <div class="readout">
+      <b id="fpsNow">—<small>fps</small></b>
+      <span>low <em id="fpsLo">—</em></span>
+      <span>avg <em id="fpsAvg">—</em></span>
+    </div>
+    <canvas id="fpsChart"></canvas>
+  </section>
+
+  <section class="card chart">
+    <h2>Peak draw <small>at 5 V, per line</small></h2>
+    <div class="readout">
+      <b id="maNow">—<small>mA</small></b>
+      <span>peak <em id="maHi">—</em></span>
+      <label class="budget">supply <input id="supply" type="number" min="0" step="100" inputmode="numeric"> mA</label>
+    </div>
+    <canvas id="maChart"></canvas>
+  </section>
+
+  <section class="card console">
+    <h2>Serial
+      <small><label><input type="checkbox" id="showStatus" checked> status lines</label></small>
+    </h2>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+
+<script type="module">
+import { applyLine } from './state.js';
+
+const $ = id => document.getElementById(id);
+const WINDOW_MS = 5 * 60 * 1000;   // charts show the last five minutes
+const QUIET_MS  = 12000;           // the board refreshes at least every STORM_LOG_STATS
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+let S = null;          // state.js picture, seeded by the snapshot
+let skew = 0;          // browser clock minus service clock
+let online = false;
+const now = () => Date.now() - skew;
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+/* ── colour ────────────────────────────────────────────────────
+   FastLED's hsv2rgb_rainbow, near enough for a swatch: eight anchors around
+   the wheel, then saturation blended toward white, then normalised so a dim
+   hue still reads on screen. */
+const RAINBOW = [[255,0,0],[171,85,0],[171,171,0],[0,255,0],[0,171,85],[0,0,255],[85,0,171],[171,0,85],[255,0,0]];
+function rainbow(hue, sat) {
+  const i = Math.floor(hue / 32), f = (hue % 32) / 32;
+  const a = RAINBOW[i], b = RAINBOW[i + 1], s = sat / 255;
+  let c = a.map((v, k) => (v + (b[k] - v) * f) * s + 255 * (1 - s));
+  const m = Math.max(...c) || 1;
+  c = c.map(v => Math.round(v * 255 / m));
+  return `rgb(${c.join(',')})`;
+}
+
+function applyPalette(name) {
+  const pal = S.firmware.palettes?.find(p => p.name === name);
+  const root = document.documentElement.style;
+  if (pal) {
+    root.setProperty('--cool', rainbow(pal.hue, pal.sat));
+    root.setProperty('--hot',  rainbow(pal.hotHue, pal.hotSat));
+  } else if (S.bootPalette) {
+    root.setProperty('--cool', S.bootPalette.cool);
+    root.setProperty('--hot',  S.bootPalette.hot);
+  }
+}
+
+/* ── small helpers ─────────────────────────────────────────── */
+function ago(t) {
+  if (!t) return '';
+  const s = Math.max(0, Math.round((now() - t) / 1000));
+  if (s < 2) return 'just now';
+  if (s < 90) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  return m < 90 ? `${m}m ago` : `${Math.round(m / 60)}h ago`;
+}
+const clock = t => new Date(t + skew).toTimeString().slice(0, 8);
+function setText(el, text) {
+  if (el.textContent === text) return false;
+  el.textContent = text;
+  return true;
+}
+function bump(el) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+
+/* ── rail ──────────────────────────────────────────────────── */
+function renderConn() {
+  const el = $('conn');
+  let s, text;
+  if (!online)              { s = 'down';    text = 'service offline — retrying'; }
+  else if (!S?.lastLineAt)  { s = 'waiting'; text = 'waiting for pio device monitor'; }
+  else if (now() - S.lastLineAt < QUIET_MS) { s = 'live'; text = 'live'; }
+  else                      { s = 'quiet';   text = `board silent ${ago(S.lastLineAt).replace(' ago', '')}`; }
+  el.dataset.s = s;
+  $('pilot').dataset.s = s;
+  setText($('connText'), text);
+  renderSkyNote(s);
+}
+
+function renderMeta() {
+  const b = S.board, fw = S.firmware;
+  const parts = [];
+  if (b) parts.push(`<b>${b.px}</b> px`, `<b>${b.segments}</b> segments`, `pin <b>${b.pin}</b>`, `master <b>${b.master}</b>`, `booted ${ago(b.bootAt)}`);
+  else if (fw.numLeds) parts.push(`<b>${fw.numLeds}</b> px`, `<b>${S.segments.length}</b> segments`, 'no boot banner seen');
+  parts.push(`<b>${S.lines.toLocaleString()}</b> lines`);
+  $('meta').innerHTML = parts.map(p => `<span>${p}</span>`).join('');
+
+  const d = $('drops');
+  d.hidden = !S.droppedTotal;
+  d.textContent = `DROPPED ×${S.droppedTotal}`;
+  d.title = S.dropped.length ? `last: ${S.dropped.at(-1).name}, ${ago(S.dropped.at(-1).t)}` : '';
+}
+
+/* ── knobs ─────────────────────────────────────────────────── */
+function pips(el, idx, steps = 10) {
+  if (el.children.length !== steps) el.innerHTML = '<i></i>'.repeat(steps);
+  [...el.children].forEach((p, i) => { p.className = i === idx ? 'on' : i < idx ? 'past' : ''; });
+}
+
+function detentOf(raw) {
+  const d = S.firmware.detents;
+  if (!d) return null;
+  const idx = d.cutoffs.filter(c => raw >= c).length;
+  const near = d.cutoffs.find(c => Math.abs(raw - c) <= d.hysteresis);
+  return { idx, steps: d.cutoffs.length + 1, near };
+}
+
+function renderRaw(el, raw) {
+  const d = S.firmware.detents, max = d?.adcMax || 4095;
+  if (!el.dataset.built) {
+    let html = '<div class="track">';
+    for (const c of d?.cutoffs || []) {
+      html += `<span class="band" style="left:${(c - d.hysteresis) / max * 100}%;width:${2 * d.hysteresis / max * 100}%"></span>`;
+      html += `<span class="cut" style="left:${c / max * 100}%"></span>`;
+    }
+    html += '<span class="dot" style="left:0"></span></div><div class="read"><span class="l"></span><span class="warn"></span></div>';
+    el.innerHTML = html;
+    el.dataset.built = '1';
+  }
+  const dot = el.querySelector('.dot'), l = el.querySelector('.l'), w = el.querySelector('.warn');
+  if (raw == null) {
+    el.classList.add('off'); el.classList.remove('edge');
+    l.innerHTML = 'raw readings off · build with <b>STORM_LOG_RAW=1</b>';
+    w.textContent = '';
+    return;
+  }
+  el.classList.remove('off');
+  dot.style.left = `${raw / max * 100}%`;
+  const det = detentOf(raw);
+  l.innerHTML = `raw <b>${raw}</b>` + (det ? ` · detent <b>${det.idx + 1}</b>/${det.steps}` : '');
+  el.classList.toggle('edge', !!(det && det.near != null));
+  w.textContent = det && det.near != null ? `on the edge of ${det.near}` : '';
+}
+
+function knobText(k) { return `${k.pct}%`; }
+function knobTag(k)  { return k.min ? 'MIN' : k.max ? 'MAX' : ''; }
+
+function renderKnobs() {
+  const st = S.status;
+  const pals = S.firmware.palettes || [];
+  const chips = $('palChips');
+  if (chips.children.length !== pals.length) chips.innerHTML = pals.map(p => `<span>${p.name}</span>`).join('');
+
+  if (!st) {
+    for (const id of ['palVal', 'spdVal', 'lvlVal']) { $(id).textContent = '—'; $(id).classList.add('none'); }
+    pips($('spdPips'), -1); pips($('lvlPips'), -1);
+    [0, 1, 2].forEach(i => renderRaw($('raw' + i), null));
+    return;
+  }
+
+  const pv = $('palVal');
+  pv.classList.remove('none');
+  if (setText(pv, st.palette)) { bump(pv); applyPalette(st.palette); }
+  const pi = pals.findIndex(p => p.name === st.palette);
+  setText($('palIdx'), pi >= 0 ? `${pi + 1} of ${pals.length}` : '');
+  [...chips.children].forEach((c, i) => c.classList.toggle('on', i === pi));
+
+  const sv = $('spdVal');
+  sv.classList.remove('none');
+  const sHtml = `${knobText(st.speed)}<em>${knobTag(st.speed)}</em>`;
+  if (sv.innerHTML !== sHtml) { sv.innerHTML = sHtml; bump(sv); }
+  pips($('spdPips'), Math.round(st.speed.pct / 10) - 1);
+
+  const lv = $('lvlVal');
+  lv.classList.remove('none');
+  const lHtml = st.level.chaos ? 'CHAOS<em>BUTTON</em>' : `${knobText(st.level)}<em>${knobTag(st.level)}</em>`;
+  if (lv.innerHTML !== lHtml) { lv.innerHTML = lHtml; bump(lv); }
+  $('kLevel').classList.toggle('chaos', st.level.chaos);
+  pips($('lvlPips'), st.level.chaos ? 9 : Math.round(st.level.pct / 10) - 1);
+
+  (st.raw || [null, null, null]).forEach((r, i) => renderRaw($('raw' + i), r));
+}
+
+/* ── sky ───────────────────────────────────────────────────── */
+let skyKey = '';
+function buildSky() {
+  const segs = S.segments, px = S.firmware.pixels;
+  $('segFrom').textContent = S.segmentsFrom === 'board' ? 'segment table from the boot banner'
+                           : S.segmentsFrom === 'source' ? 'segment table from src/layout.h' : '';
+  const key = JSON.stringify([segs, !!px]);
+  if (key === skyKey) return;
+  skyKey = key;
+  const svg = $('skySvg');
+  svg.innerHTML = `<defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+
+  if (px && px.length) {
+    // the bench's own geometry; y is on the same scale as x, so aspect holds
+    const xs = px.map(p => p[0]), ys = px.map(p => p[1]);
+    const pad = 10;
+    const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad;
+    const w = Math.max(...xs) - x0 + pad, h = Math.max(...ys) - y0 + pad + 6;
+    svg.setAttribute('viewBox', `${x0} ${y0} ${w} ${h}`);
+    for (const sg of segs) {
+      const g = document.createElementNS(SVGNS, 'g');
+      g.setAttribute('class', `seg ${sg.role}`);
+      g.dataset.name = sg.name;
+      for (let i = sg.start; i < sg.start + sg.len && i < px.length; i++) {
+        const c = document.createElementNS(SVGNS, 'circle');
+        c.setAttribute('cx', px[i][0]); c.setAttribute('cy', px[i][1]);
+        c.setAttribute('r', sg.role === 'cloud' ? 1.5 : 1.3);
+        g.appendChild(c);
+      }
+      const t = document.createElementNS(SVGNS, 'title');
+      t.textContent = `${sg.name} · leds ${sg.start}…${sg.start + sg.len - 1}`;
+      g.appendChild(t);
+      svg.appendChild(g);
+      if (sg.role === 'bolt' && sg.len) {
+        // label the root at the end of its run, where the bolt tips out
+        const end = px[Math.min(sg.start + sg.len - 1, px.length - 1)];
+        const label = document.createElementNS(SVGNS, 'text');
+        label.setAttribute('class', 'label');
+        label.setAttribute('x', end[0]); label.setAttribute('y', Math.min(end[1] + 9, y0 + h - 2));
+        label.setAttribute('text-anchor', 'middle');
+        label.dataset.name = sg.name;
+        label.textContent = sg.name.replace(/^Bolt_/, '');
+        svg.appendChild(label);
+      }
+    }
+  } else {
+    // no geometry: a strip, one cell per segment, scaled by length
+    const total = segs.reduce((n, s) => Math.max(n, s.start + s.len), 0) || 1;
+    svg.setAttribute('viewBox', `0 0 ${total} 40`);
+    for (const sg of segs) {
+      const g = document.createElementNS(SVGNS, 'g');
+      g.setAttribute('class', `seg ${sg.role}`);
+      g.dataset.name = sg.name;
+      for (let i = 0; i < sg.len; i++) {
+        const c = document.createElementNS(SVGNS, 'circle');
+        c.setAttribute('cx', sg.start + i + 0.5); c.setAttribute('cy', 16); c.setAttribute('r', 0.42);
+        g.appendChild(c);
+      }
+      svg.appendChild(g);
+    }
+  }
+}
+
+function renderSky() {
+  buildSky();
+  const strike = S.status?.strike;
+  const lit = new Set();
+  if (strike) {
+    lit.add(strike.name);
+    for (const sg of S.segments) if (sg.parent === strike.name) lit.add(sg.name);
+  }
+  for (const el of $('skySvg').querySelectorAll('[data-name]')) el.classList.toggle('lit', lit.has(el.dataset.name));
+
+  const ns = $('nowStrike');
+  ns.classList.toggle('quiet', !strike);
+  setText(ns, strike ? strike.name + (strike.overlap ? `  +${strike.overlap}` : '') : 'quiet sky');
+  const last = S.strikes.at(-1);
+  setText($('nowAge'), strike || !last ? '' : `last ${last.name}, ${ago(last.t)}`);
+}
+
+function renderSkyNote(connState) {
+  const note = $('skyNote');
+  if (connState === 'waiting') {
+    note.innerHTML = '<span>Nothing from the board yet. Start the monitor:</span><code>pio device monitor</code>' +
+                     '<small>its dashboard filter copies each line here</small>';
+    note.hidden = false;
+  } else if (connState === 'down') {
+    note.innerHTML = '<span>The dashboard service is not answering.</span><code>node dashboard/server.js</code>';
+    note.hidden = false;
+  } else note.hidden = true;
+}
+
+/* ── channels ──────────────────────────────────────────────── */
+function renderChannels() {
+  const roots = S.segments.filter(s => s.role === 'bolt');
+  const counts = S.strikeCounts;
+  const max = Math.max(1, ...roots.map(r => counts[r.name] || 0));
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const lastAt = name => { for (let i = S.strikes.length - 1; i >= 0; i--) if (S.strikes[i].name === name) return S.strikes[i].t; return 0; };
+  const litName = S.status?.strike?.name;
+
+  $('chanTotal').textContent = total ? `${total} strike${total === 1 ? '' : 's'} seen` : '';
+  $('chanList').innerHTML = roots.length ? roots.map(r => {
+    const forks = S.segments.filter(s => s.parent === r.name);
+    const n = counts[r.name] || 0, t = lastAt(r.name);
+    const sub = [
+      `${r.len} px`,
+      ...forks.map(f => `fork ${f.len} px at ${f.forkAt}%`),
+      t ? ago(t) : 'not yet',
+    ].join(' · ');
+    return `<div class="chan${r.name === litName ? ' lit' : ''}">
+      <span class="nm">${r.name}</span><span class="ct">${n}</span>
+      <span class="bar"><i style="width:${n / max * 100}%"></i></span>
+      <span class="sub">${sub}</span></div>`;
+  }).join('') : '<div class="empty">no root channels in the segment table</div>';
+
+  const rec = S.strikes.slice(-10).reverse();
+  $('recent').innerHTML = rec.length
+    ? rec.map(s => `<li><span>${s.name}${s.overlap ? ` +${s.overlap}` : ''}</span><span>${ago(s.t)}</span></li>`).join('')
+    : '<li class="empty">no strikes seen yet</li>';
+}
+
+/* ── charts ────────────────────────────────────────────────── */
+function niceMax(v) {
+  const p = Math.pow(10, Math.floor(Math.log10(v || 1)));
+  return [1, 2, 2.5, 5, 10].map(m => m * p).find(m => m >= v);
+}
+
+function drawChart(canvas, key, { color, budget, floor }) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  const t1 = now(), t0 = t1 - WINDOW_MS;
+  const pts = S.history.filter(p => p.t >= t0 - 5000);
+  const left = 38, right = 6, top = 8, bottom = 18;
+  const pw = w - left - right, ph = h - top - bottom;
+  const vmax = niceMax(Math.max(floor, budget || 0, ...pts.map(p => p[key])) * 1.1);
+  const X = t => left + (t - t0) / WINDOW_MS * pw;
+  const Y = v => top + ph - v / vmax * ph;
+
+  const css = getComputedStyle(document.documentElement);
+  g.font = `10px ${css.getPropertyValue('--mono')}`;
+  g.textBaseline = 'middle';
+  // value grid
+  for (let i = 0; i <= 4; i++) {
+    const v = vmax * i / 4, y = Math.round(Y(v)) + 0.5;
+    g.strokeStyle = i ? '#1c2431' : '#28313f';
+    g.beginPath(); g.moveTo(left, y); g.lineTo(w - right, y); g.stroke();
+    g.fillStyle = '#5c6879'; g.textAlign = 'right';
+    g.fillText(v >= 1000 ? `${v / 1000}k` : String(v), left - 6, y);
+  }
+  // time ticks, a minute apart
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  for (let m = 0; m <= 5; m++) {
+    const x = X(t1 - m * 60000);
+    g.fillStyle = '#5c6879';
+    g.fillText(m ? `-${m}m` : 'now', Math.min(Math.max(x, left + 10), w - right - 12), h - 4);
+  }
+  if (budget) {
+    const y = Math.round(Y(budget)) + 0.5;
+    g.strokeStyle = '#f0a94c'; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(left, y); g.lineTo(w - right, y); g.stroke();
+    g.setLineDash([]);
+  }
+  if (!pts.length) return;
+
+  g.save();
+  g.beginPath(); g.rect(left, top, pw, ph + 1); g.clip();
+  // runs split where the board went quiet, so a gap reads as a gap
+  const runs = [[]];
+  for (let i = 0; i < pts.length; i++) {
+    if (i && pts[i].t - pts[i - 1].t > QUIET_MS) runs.push([]);
+    runs.at(-1).push(pts[i]);
+  }
+  for (const run of runs) {
+    if (!run.length) continue;
+    const grad = g.createLinearGradient(0, top, 0, top + ph);
+    grad.addColorStop(0, color + '40'); grad.addColorStop(1, color + '00');
+    g.beginPath();
+    g.moveTo(X(run[0].t), Y(0));
+    for (const p of run) g.lineTo(X(p.t), Y(p[key]));
+    g.lineTo(X(run.at(-1).t), Y(0));
+    g.fillStyle = grad; g.fill();
+    g.beginPath();
+    run.forEach((p, i) => i ? g.lineTo(X(p.t), Y(p[key])) : g.moveTo(X(p.t), Y(p[key])));
+    g.strokeStyle = color; g.lineWidth = 1.5; g.stroke();
+  }
+  g.restore();
+}
+
+function renderCharts() {
+  const budget = +$('supply').value || 0;
+  const recent = S.history.filter(p => p.t >= now() - WINDOW_MS);
+  const last = S.history.at(-1);
+  const fpsList = recent.map(p => p.fps), maList = recent.map(p => p.mA);
+
+  $('fpsNow').innerHTML = `${last ? last.fps : '—'}<small>fps</small>`;
+  $('fpsLo').textContent  = fpsList.length ? Math.min(...fpsList) : '—';
+  $('fpsAvg').textContent = fpsList.length ? Math.round(fpsList.reduce((a, b) => a + b, 0) / fpsList.length) : '—';
+  $('maNow').innerHTML = `${last ? last.mA.toLocaleString() : '—'}<small>mA</small>`;
+  const hi = maList.length ? Math.max(...maList) : null;
+  $('maHi').textContent = hi == null ? '—' : hi.toLocaleString();
+  $('maHi').classList.toggle('over', !!(budget && hi > budget));
+  $('maNow').classList.toggle('over', !!(budget && last && last.mA > budget));
+
+  drawChart($('fpsChart'), 'fps', { color: '#82c8ff', floor: 60 });
+  drawChart($('maChart'),  'mA',  { color: '#63d69a', floor: 1000, budget });
+}
+
+/* ── meters ────────────────────────────────────────────────────
+   Four dual-scale meters. The knob meters read the wiper voltage on the
+   bottom scale (raw ADC × 3.3 V / 4095, so approximate: the ESP32's ADC is
+   not linear near its ends) and the detent it falls in on the top scale,
+   with the cutoffs as ticks and the hysteresis as amber bands. The draw meter
+   reads amps on top and watts at 5 V below. The needle is a CSS transform
+   with a transition, so each new reading swings in from wherever it is. */
+const SWEEP = 42;                       // degrees either side of upright
+const PIVOT = [120, 175];               // below the face, as on a real movement
+const VREF = 3.3, ADC_MAX = 4095;
+
+const fx = n => n.toFixed(2);
+const pt = (r, f) => {
+  const a = (-SWEEP + 2 * SWEEP * f) * Math.PI / 180;
+  return [PIVOT[0] + r * Math.sin(a), PIVOT[1] - r * Math.cos(a)];
+};
+const arcPath = (r, f0, f1) => {
+  const [x0, y0] = pt(r, f0), [x1, y1] = pt(r, f1);
+  return `M${fx(x0)} ${fx(y0)}A${r} ${r} 0 0 1 ${fx(x1)} ${fx(y1)}`;
+};
+const tickLine = (r0, r1, f, w) => {
+  const [x0, y0] = pt(r0, f), [x1, y1] = pt(r1, f);
+  return `<line class="ink" x1="${fx(x0)}" y1="${fx(y0)}" x2="${fx(x1)}" y2="${fx(y1)}" stroke-width="${w}"/>`;
+};
+const label = (r, f, text, size) => {
+  const [x, y] = pt(r, f), deg = -SWEEP + 2 * SWEEP * f;
+  return `<text class="lbl" x="${fx(x)}" y="${fx(y)}" font-size="${size}" transform="rotate(${fx(deg)} ${fx(x)} ${fx(y)})">${text}</text>`;
+};
+const band = (r, f0, f1, w, color) =>
+  `<path d="${arcPath(r, Math.max(0, f0), Math.min(1, f1))}" stroke="${color}" stroke-width="${w}" fill="none"/>`;
+
+function niceStep(span, n) {
+  const raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  return [1, 2, 2.5, 5, 10].map(m => m * p).find(m => m >= raw);
+}
+const num = v => String(+v.toFixed(2));
+
+/* top: { major:[{f,text?}], minor:[f], bands:[[f0,f1,color]] }, bottom likewise */
+function faceSVG(id, unit, top, bottom) {
+  const T = 124, B = 116;               // radii of the two scale bases
+  let scale = `<path class="ink" d="${arcPath(T, 0, 1)}" stroke-width=".8"/>`
+            + `<path class="ink" d="${arcPath(B, 0, 1)}" stroke-width=".8"/>`;
+  for (const [f0, f1, c] of top.bands || [])    scale += band(T + 3.5, f0, f1, 4, c);
+  for (const [f0, f1, c] of bottom.bands || []) scale += band(B - 3, f0, f1, 3.5, c);
+  for (const f of bottom.minor || []) scale += tickLine(B, T, f, .45);           // the ladder
+  for (const m of bottom.major) { scale += tickLine(B - 7, T, m.f, .9); if (m.text != null) scale += label(B - 16, m.f, m.text, 9); }
+  for (const f of top.minor || []) scale += tickLine(T, T + 4, f, .6);
+  for (const m of top.major) { if (m.tick !== false) scale += tickLine(T, T + 7, m.f, .9); if (m.text != null) scale += label(T + 15, m.f, m.text, 10.5); }
+
+  return `<svg viewBox="0 0 240 124" aria-hidden="true">
+  <defs>
+    <radialGradient id="${id}-g" cx="50%" cy="105%" r="95%">
+      <stop offset="0" stop-color="#fffbe8"/><stop offset=".32" stop-color="#f7e6a6"/>
+      <stop offset=".72" stop-color="#d9b661"/><stop offset="1" stop-color="#9a7832"/>
+    </radialGradient>
+    <linearGradient id="${id}-s" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="${id}-c"><rect x="10" y="10" width="220" height="104" rx="10"/></clipPath>
+  </defs>
+  <rect class="bezel" x=".5" y=".5" width="239" height="123" rx="17"/>
+  <g clip-path="url(#${id}-c)">
+    <rect x="10" y="10" width="220" height="104" fill="url(#${id}-g)"/>
+    ${scale}
+    <text class="unit" x="120" y="104">${unit}</text>
+    <g class="needle" style="transform:rotate(${-SWEEP - 3}deg)">
+      <line class="hand-shadow" x1="123" y1="178" x2="123" y2="45"/>
+      <line class="hand" x1="120" y1="175" x2="120" y2="40"/>
+    </g>
+    <path d="M10 10H230V50Q120 68 10 44Z" fill="url(#${id}-s)"/>
+    <rect class="dim" x="10" y="10" width="220" height="104"/>
+  </g>
+  <rect class="rim" x="10" y="10" width="220" height="104" rx="10"/>
+</svg>`;
+}
+
+function knobFace(id) {
+  const d = S.firmware.detents;
+  const top = { major: [], bands: [] };
+  if (d) {
+    const edges = [0, ...d.cutoffs, d.adcMax];
+    d.cutoffs.forEach(c => {
+      top.major.push({ f: c / d.adcMax });
+      top.bands.push([(c - d.hysteresis) / d.adcMax, (c + d.hysteresis) / d.adcMax, 'rgba(196,118,18,.6)']);
+    });
+    // detent numbers sit where the knob rests: the middle of each band
+    for (let i = 0; i < edges.length - 1; i++) top.major.push({ f: (edges[i] + edges[i + 1]) / 2 / d.adcMax, text: i + 1, tick: false });
+  }
+  const bottom = { major: [], minor: [], bands: [[3.1 / VREF, 1, '#b8322a']] };   // the ADC flattens out up there
+  for (let v = 0; v <= VREF + 1e-9; v += 0.1) {
+    const f = v / VREF, r = Math.round(v * 10);
+    if (r % 5 === 0) bottom.major.push({ f, text: num(v) });
+    else bottom.minor.push(f);
+  }
+  return faceSVG(id, 'V', top, bottom);
+}
+
+let ampMax = 10;
+function ampFace(id) {
+  const supply = (+$('supply').value || 0) / 1000;
+  ampMax = supply ? niceMax(supply * 1.25) : 10;
+  const step = niceStep(ampMax, 5), wStep = niceStep(ampMax * 5, 5);
+  const top = { major: [], minor: [], bands: supply ? [[supply / ampMax, 1, '#b8322a']] : [] };
+  for (let a = 0; a <= ampMax + 1e-9; a += step / 5) {
+    const k = Math.round(a / (step / 5));
+    if (k % 5 === 0) top.major.push({ f: a / ampMax, text: num(a) }); else top.minor.push(a / ampMax);
+  }
+  const bottom = { major: [], minor: [] };
+  for (let w = 0; w <= ampMax * 5 + 1e-9; w += wStep / 2) {
+    const k = Math.round(w / (wStep / 2));
+    if (k % 2 === 0) bottom.major.push({ f: w / (ampMax * 5), text: num(w) }); else bottom.minor.push(w / (ampMax * 5));
+  }
+  return faceSVG(id, 'A', top, bottom);
+}
+
+const METERS = [
+  { id: 'mtr0', name: 'Palette', unit: 'V', face: knobFace, read: st => st.raw && st.raw[0] },
+  { id: 'mtr1', name: 'Speed',   unit: 'V', face: knobFace, read: st => st.raw && st.raw[1] },
+  { id: 'mtr2', name: 'Level',   unit: 'V', face: knobFace, read: st => st.raw && st.raw[2] },
+  { id: 'mtr3', name: 'Draw',    unit: 'A', face: ampFace,  read: st => st.mA },
+];
+const fracOf  = (m, v) => m.unit === 'A' ? v / 1000 / ampMax : v / ADC_MAX;
+const digitsOf = (m, v) => {
+  if (m.unit === 'V') return (v / ADC_MAX * VREF).toFixed(2);
+  const a = v / 1000;
+  return a < 10 ? a.toFixed(2) : a < 100 ? a.toFixed(1) : String(Math.min(999, Math.round(a)));
+};
+
+function nixieHTML(n) {
+  return '<span class="tube"><b class="ghost">8</b><b class="d"></b><i class="dp"></i></span>'.repeat(n);
+}
+function setNixies(el, str) {
+  const cells = [];
+  for (const ch of str || '') ch === '.' ? cells.length && (cells.at(-1).dp = true) : cells.push({ ch, dp: false });
+  [...el.children].forEach((tube, i) => {
+    const d = tube.querySelector('.d'), c = cells[i];
+    const ch = c ? c.ch : '';
+    if (d.textContent !== ch) { d.textContent = ch; d.classList.remove('flick'); void d.offsetWidth; if (ch) d.classList.add('flick'); }
+    tube.querySelector('.dp').classList.toggle('on', !!c?.dp);
+  });
+}
+
+let metersKey = '';
+function buildMeters() {
+  const key = JSON.stringify([S.firmware.detents, $('supply').value]);
+  if (key === metersKey) return;
+  metersKey = key;
+  $('meters').innerHTML = METERS.map(m => `
+    <div class="meter off" id="${m.id}">
+      ${m.face(m.id)}
+      <div class="plate">${m.name}<span class="nixies">${nixieHTML(3)}</span><em>${m.unit}</em></div>
+    </div>`).join('');
+  renderNeedles(); renderNixies(true);
+}
+
+function live() { return online && S?.lastLineAt && now() - S.lastLineAt < QUIET_MS; }
+
+function renderNeedles() {
+  const st = S.status;
+  for (const m of METERS) {
+    const el = $(m.id), v = st ? m.read(st) : null;
+    const on = v != null && live();
+    el.classList.toggle('off', !on);
+    // with nothing to show the needle rests just past zero, on its stop
+    const f = on ? Math.max(-0.03, Math.min(1.03, fracOf(m, v))) : -0.07;
+    el.querySelector('.needle').style.transform = `rotate(${(-SWEEP + 2 * SWEEP * f).toFixed(2)}deg)`;
+  }
+}
+
+// digits change twice a second at most, like a panel meter's sample rate
+function renderNixies() {
+  const st = S?.status;
+  for (const m of METERS) {
+    const el = $(m.id)?.querySelector('.nixies');
+    if (!el) continue;
+    const v = st ? m.read(st) : null;
+    setNixies(el, v != null && live() ? digitsOf(m, v) : '');
+  }
+}
+setInterval(() => S && renderNixies(), 500);
+
+/* ── console ───────────────────────────────────────────────── */
+const logEl = $('log');
+function logRow(entry) {
+  const d = document.createElement('div');
+  d.className = entry.type === 'status' ? 'status' : entry.type === 'dropped' ? 'dropped'
+              : /^\[(storm|pots|mood)\]/.test(entry.line) || entry.type === 'boot' ? 'boot' : '';
+  const time = document.createElement('time');
+  time.textContent = clock(entry.t);
+  d.append(time, entry.line);
+  return d;
+}
+function appendLog(entry) {
+  const stick = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 24;
+  logEl.appendChild(logRow(entry));
+  while (logEl.childElementCount > 300) logEl.firstElementChild.remove();
+  if (stick) logEl.scrollTop = logEl.scrollHeight;
+}
+function renderLog() {
+  logEl.replaceChildren(...S.log.map(logRow));
+  logEl.scrollTop = logEl.scrollHeight;
+}
+const showStatus = $('showStatus');
+showStatus.checked = store.get('showStatus', '1') === '1';
+logEl.classList.toggle('nostatus', !showStatus.checked);
+showStatus.addEventListener('change', () => {
+  logEl.classList.toggle('nostatus', !showStatus.checked);
+  store.set('showStatus', showStatus.checked ? '1' : '0');
+  logEl.scrollTop = logEl.scrollHeight;
+});
+
+const supply = $('supply');
+supply.value = store.get('supply', '');
+supply.placeholder = 'none';
+supply.addEventListener('input', () => { store.set('supply', supply.value); if (S) { renderCharts(); buildMeters(); } });
+
+/* ── wiring ────────────────────────────────────────────────── */
+function renderAll() {
+  if (S.status) applyPalette(S.status.palette);
+  metersKey = '';
+  renderConn(); renderMeta(); buildMeters(); renderKnobs(); renderSky(); renderChannels(); renderCharts(); renderLog();
+}
+
+function connect() {
+  const es = new EventSource('/events');
+  es.addEventListener('open', () => { online = true; });
+  es.addEventListener('error', () => { online = false; if (S) renderConn(); else renderSkyNote('down'); $('conn').dataset.s = 'down'; setText($('connText'), 'service offline — retrying'); });
+  es.addEventListener('snapshot', e => {
+    const d = JSON.parse(e.data);
+    online = true;
+    skew = Date.now() - d.now;
+    S = d.state;
+    skyKey = '';
+    renderAll();
+  });
+  es.addEventListener('line', e => {
+    if (!S) return;
+    const { t, line } = JSON.parse(e.data);
+    const p = applyLine(S, line, t);
+    if (!p) return;
+    appendLog(S.log.at(-1));
+    if (p.type === 'status') { renderNeedles(); renderKnobs(); renderSky(); renderChannels(); renderCharts(); }
+    else if (p.type === 'segment' || p.type === 'boot') { renderSky(); renderChannels(); }
+    renderConn(); renderMeta();
+  });
+}
+
+// ages, staleness and the chart's time axis move even when the board is quiet
+setInterval(() => {
+  if (!S) return;
+  renderConn(); renderMeta(); renderNeedles(); renderSky(); renderChannels(); renderCharts();
+}, 1000);
+addEventListener('resize', () => S && renderCharts());
+
+connect();
+</script>
+</body>
+</html>
