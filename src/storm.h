@@ -21,7 +21,6 @@ CRGB coolC, hotC;
    brightness now and storm severity later read g_level, so they share one
    set of detents. */
 #define LEVEL_STEPS   10
-#define LEVEL_PERCENT(i)  ((uint16_t)(i) * 100 / (LEVEL_STEPS - 1))
 #define SPEED_STEPS   10
 
 uint8_t  g_hue    = HUE;
@@ -47,6 +46,15 @@ uint8_t  g_speed   = SPEED_STEPS / 2;  // 0..SPEED_STEPS-1, the speed knob's det
 void updatePalette() {
   hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
   hsv2rgb_rainbow(CHSV(g_hotHue, g_hotSat, 255), hotC);
+}
+
+/* The brightness this frame goes out at: the level knob's, raised toward the
+   palette's ceiling while chaos rages, so the level knob is ignored at the
+   height of it. */
+uint8_t frameBrightness() {
+  uint8_t ceil8 = scale8(MASTER, g_trim);
+  uint8_t head  = ceil8 > g_bright ? ceil8 - g_bright : 0;
+  return g_bright + scale8(head, g_chaos);
 }
 
 /* ── clock ──────────────────────────────────────────────────── */
@@ -122,8 +130,8 @@ void makeStrike(uint8_t slot, uint8_t segIdx, uint32_t t0) {
     t += dur + rndR(RGAP_MIN, RGAP_MAX + 1);
   }
   s.lastEnd = s.strokes[s.nStrokes - 1].at + s.strokes[s.nStrokes - 1].dur;
-  uint16_t g = GLOW_MS + rndR(0, 200); g = (g > 80) ? g - 80 : 40;
-  s.glowMs = g;
+  uint16_t g = GLOW_MS + rndR(0, 200);
+  s.glowMs = g > 120 ? g - 80 : 40;      // GLOW_MS - 80 to + 119, never under 40
   s.total  = s.lastEnd + (s.glowMs > CLOUD_MS ? s.glowMs : CLOUD_MS);
   s.forkMask = 1;                       // the return stroke always forks
   for (uint8_t k = 1; k < s.nStrokes; k++)
@@ -200,7 +208,10 @@ void renderChannel(const Strike &s, uint16_t e, uint8_t segIdx,
     uint16_t le = e - leaderStart;
     uint16_t head = (uint16_t)(((uint32_t)le * len) / leaderDur);
     for (uint16_t i = 0; i <= head && i < len; i++) {
-      uint8_t b = qsub8(240, (uint8_t)((head - i) * TRAIL));
+      // fades TRAIL per pixel behind the head; wider than 8 bits on purpose,
+      // so a long trail runs out at zero instead of wrapping back to bright
+      uint16_t fade = (head - i) * TRAIL;
+      uint8_t b = fade < 240 ? 240 - fade : 0;
       if (b) addLed(start + i, scale8(b, dim), 200, i, len);
     }
   }
@@ -303,14 +314,14 @@ static void knobPercent(char *buf, size_t n, uint8_t idx, uint8_t steps) {
            idx == 0 ? " (min)" : idx == steps - 1 ? " (max)" : "");
 }
 
-void logDashboard(uint32_t realNow) {
+/* drawmW is what the strip drew for the frame just sent, from stripShow(). */
+void logDashboard(uint32_t realNow, uint32_t drawmW) {
 #if STORM_LOG
   static char     lastLine[128] = "";
   static uint32_t lastAt = 0, frames = 0, peakmW = 0, fpsAt = 0, fps = 0;
 
   frames++;
-  uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
-  if (mw > peakmW) peakmW = mw;
+  if (drawmW > peakmW) peakmW = drawmW;
   if (realNow - fpsAt >= 1000) {
     fps = frames * 1000UL / (realNow - fpsAt ? realNow - fpsAt : 1);
     frames = 0; fpsAt = realNow;
@@ -359,20 +370,36 @@ void logDashboard(uint32_t realNow) {
 #endif
   peakmW = 0;                    // peak is per line, not since boot
 #else
-  (void)realNow;
+  (void)realNow; (void)drawmW;
 #endif
 }
 
-/* ── main loop ──────────────────────────────────────────────── */
-// forks are never struck directly — they light because their parent did
-uint8_t randomBolt() {
+/* ── scheduler ──────────────────────────────────────────────── */
+/* Root channels only: forks are never struck directly, they light because
+   their parent did. Draws from random16() in the same order as the bench, so
+   the same seed replays the same storm. */
+void scheduleStrikes(uint32_t now) {
+  if (now < nextStrikeAt) return;
+
   uint8_t bolts[NUM_SEGMENTS], n = 0;
   for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
     Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
-    if (sg.isBolt && sg.parent < 0) bolts[n++] = i;
+    if (sg.isBolt && sg.parent < 0 && sg.len > 1) bolts[n++] = i;
   }
-  return n ? bolts[random8() % n] : 0;
+  if (n) {
+    uint8_t pick = rndR(0, n);
+    trigger(bolts[pick], now);
+    if (random8() < g_dblChance && n > 1) {          // a second, different channel
+      uint8_t other = rndR(0, n);
+      if (other == pick) other = (other + 1) % n;
+      uint16_t lag = rndR(40, CLUSTER_MS + 1);
+      trigger(bolts[other], now + lag);
+    }
+  }
+  nextStrikeAt = now + rndR(g_gapMin, g_gapMax + 1);
 }
+
+/* ── boot banner ────────────────────────────────────────────── */
 
 void logBoot() {
 #if STORM_LOG

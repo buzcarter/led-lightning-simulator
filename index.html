@@ -367,15 +367,15 @@ textarea.paste{
     <details>
       <summary>Optics <span class="note">preview only</span></summary>
       <div class="body">
-        <p class="blurb">Master brightness and tint are exported. Dot size and bloom shape only this preview — they model diffusion through the batting, not anything the controller does.</p>
+        <p class="blurb">Master brightness and colour are exported. Dot size and bloom shape only this preview — they model diffusion through the batting, not anything the controller does.</p>
         <div class="grid" id="gLook"></div>
       </div>
     </details>
 
     <details>
-      <summary>Export <span class="note">Arduino / FastLED</span></summary>
+      <summary>Export <span class="note">Arduino / ESP32</span></summary>
       <div class="body">
-        <p class="blurb">A direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same <code>hsv2rgb_rainbow</code>. Drop these in <code>src/</code>. <code>config.h</code> and <code>controls.h</code> are yours to keep: the other four are overwritten every export.</p>
+        <p class="blurb">A direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same <code>hsv2rgb_rainbow</code>. Drop these in <code>src/</code>. <code>config.h</code> and <code>controls.h</code> are yours to keep: the other five are overwritten every export.</p>
         <div class="tabs" id="tabs"></div>
         <pre class="code" id="codeOut"></pre>
         <div class="exp-acts">
@@ -1470,10 +1470,11 @@ document.getElementById('resetLayout').addEventListener('click', () => {
 
 /* ══ export ══════════════════════════════════════════════════════ */
 /* ── export ──────────────────────────────────────────────────────
-   Five files, split along the line of ownership: layout.h, tuning.h,
-   storm.h and main.cpp are regenerated wholesale, so anything you hand-edit
-   in them is lost on the next export. config.h is emitted here only as a
-   starter — on disk it belongs to you, and the bench never overwrites it. */
+   Seven files, split along the line of ownership: layout.h, tuning.h,
+   storm.h, strip.h and main.cpp are regenerated wholesale, so anything you
+   hand-edit in them is lost on the next export. config.h and controls.h are
+   emitted here only as starters — on disk they belong to you, and the bench
+   never overwrites them. */
 const SEG_NAME_LEN = 20;
 const cName = t => String(t).replace(/[^\x20-\x7E]/g, '-').replace(/["\\]/g, '')
                             .replace(/\s+/g, ' ').trim().slice(0, SEG_NAME_LEN - 1);
@@ -1525,8 +1526,8 @@ const FILE_CONTROLS_H = `/* ─────────────────�
 #endif
 
 /* ADC1 only. ADC2 (GPIO 0/2/4/12-15/25-27) stops working the moment WiFi
-   is enabled, and GPIO2 is the strip anyway. GPIO34 is input-only, which
-   is a feature for an analog input — it cannot be driven by accident. */
+   is enabled. GPIO34 is input-only, which is a feature for an analog
+   input — it cannot be driven by accident. */
 #define POT_PALETTE_PIN  GPIO_NUM_32
 #define POT_SPEED_PIN    GPIO_NUM_33
 #define POT_LEVEL_PIN    GPIO_NUM_34
@@ -1557,8 +1558,6 @@ static const uint16_t SPEED_Q8[SPEED_STEPS] = {
    whole costume look broken is rarely what you want at the end of the
    travel. Set to 0 to turn it into an off switch. */
 #define POT_LEVEL_FLOOR  20
-
-#define POT_LOG_MS       400
 
 /* ── mood LED ───────────────────────────────────────────────── */
 /* A discrete 4-leg RGB LED on three PWM channels, showing which palette is
@@ -1741,21 +1740,16 @@ void chaosPoll(uint32_t realNow, uint32_t stormNow) {
   if (e >= (uint32_t)CHAOS_HOLD_MS + CHAOS_DECAY_MS) {
     chaosAt = 0; g_chaos = 0;
     g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
-    FastLED.setBrightness(g_bright);
     return;
   }
   uint8_t amt = 255;
   if (e > CHAOS_HOLD_MS)
     amt = (uint8_t)(255 - (uint32_t)(e - CHAOS_HOLD_MS) * 255 / CHAOS_DECAY_MS);
-  g_chaos = amt;
+  g_chaos = amt;                                     // frameBrightness() reads this too
 
   g_gapMin    = chaosLerp16(GAP_MIN, CHAOS_GAP_MIN, amt);
   g_gapMax    = chaosLerp16(GAP_MAX, CHAOS_GAP_MAX, amt);
   g_dblChance = (uint8_t)chaosLerp16(DBL_CHANCE, 255, amt);
-
-  uint8_t ceil8 = scale8(MASTER, g_trim);            // ignore the level knob while it rages
-  uint8_t head  = ceil8 > g_bright ? ceil8 - g_bright : 0;
-  FastLED.setBrightness((uint8_t)(g_bright + scale8(head, amt)));
 }
 
 #else
@@ -1802,7 +1796,6 @@ void controlsUpdate(bool force) {
      fewer palettes than detents they repeat round the dial, so every click
      still changes something; add palettes in config.h to fill it. */
   uint8_t pal = potIndex(potPalette, 255) % NUM_PALETTES;
-  bool trimChanged = false;
   if (force || pal != g_palette) {
     g_palette = pal;
     g_hue    = PALETTES[pal].hue;
@@ -1811,17 +1804,16 @@ void controlsUpdate(bool force) {
     g_hotSat = PALETTES[pal].hotSat;
     g_trim   = PALETTES[pal].trim;
     updatePalette();
-    trimChanged = true;
   }
 
   g_speed   = potIndex(potSpeed, SPEED_STEPS);
   g_speedQ8 = SPEED_Q8[g_speed];
 
+  /* Level spans POT_LEVEL_FLOOR up to the palette's ceiling, MASTER x TRIM. */
   g_level = potIndex(potLevel, LEVEL_STEPS);
   uint8_t ceil8 = scale8(MASTER, g_trim);
   uint8_t span  = ceil8 > POT_LEVEL_FLOOR ? ceil8 - POT_LEVEL_FLOOR : 0;
-  uint8_t b = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
-  if (force || trimChanged || b != g_bright) { g_bright = b; FastLED.setBrightness(b); }
+  g_bright = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
 
   g_potRaw[0] = potPalette.raw();
   g_potRaw[1] = potSpeed.raw();
@@ -1857,15 +1849,23 @@ const FILE_CONFIG_H = `/* ──────────────────
 #include <Arduino.h>
 
 /* ── strip ──────────────────────────────────────────────────── */
-/* GPIO2 is a strapping pin, but strapping pins are only sampled at reset —
-   after boot it is an ordinary output, which is why this works. The one
-   risk is something holding it high during reset and blocking boot.
-   If you ever need to move it: GPIO13/18/19/21/22/23/25/26/27/32/33 are
-   all clear. Avoid GPIO6-11 (SPI flash), GPIO34-39 (input only),
-   GPIO1/3 (Serial), GPIO16/17 (PSRAM on WROVER modules). */
-#define LED_PIN      GPIO_NUM_2
-#define LED_TYPE     WS2812B
-#define COLOR_ORDER  GRB
+/* GPIO18 is free of every complication. Not GPIO2: it is a strapping pin
+   and it also drives the DevKit's on-board blue LED, which loads the data
+   line. Other clear choices: GPIO19/21/22/23. Avoid GPIO6-11 (SPI flash),
+   GPIO34-39 (input only), GPIO1/3 (Serial), GPIO16/17 (PSRAM on WROVER
+   modules), and the pins controls.h already uses. */
+#define LED_PIN         GPIO_NUM_18
+#define LED_TYPE        (NEO_GRB + NEO_KHZ800)   // WS2812B: GRB byte order, 800 kHz
+
+/* White balance for the pixels, applied after brightness. FastLED's
+   TypicalLEDStrip (255, 176, 240) pulls back the green that strip pixels
+   overdo. UncorrectedColor turns it off. */
+#define LED_CORRECTION  TypicalLEDStrip
+
+/* Power cap in mA at 5 V, for the strip alone. 0 = no cap. 300 px at full
+   white is about 18 A, and this animation really does flash most of the
+   cloud at once; set this to what your supply can deliver. */
+#define LED_MAX_MA      0
 
 /* How many strikes may overlap, and how many strokes each may have.
    Exceeding MAX_STRIKES logs a DROPPED line rather than queueing. */
@@ -1873,8 +1873,8 @@ const FILE_CONFIG_H = `/* ──────────────────
 #define MAX_STROKES  6
 
 /* ── logging ────────────────────────────────────────────────── */
-/* 0 removes Serial, the format strings and the per-frame power
-   measurement entirely — about 28 KB of flash on an ESP32.
+/* 0 removes Serial and the format strings entirely — about 28 KB of
+   flash on an ESP32.
    Override from platformio.ini with -DSTORM_LOG=0. */
 #ifndef STORM_LOG
   #define STORM_LOG      1
@@ -1954,7 +1954,6 @@ CRGB coolC, hotC;
    brightness now and storm severity later read g_level, so they share one
    set of detents. */
 #define LEVEL_STEPS   10
-#define LEVEL_PERCENT(i)  ((uint16_t)(i) * 100 / (LEVEL_STEPS - 1))
 #define SPEED_STEPS   10
 
 uint8_t  g_hue    = HUE;
@@ -1980,6 +1979,15 @@ uint8_t  g_speed   = SPEED_STEPS / 2;  // 0..SPEED_STEPS-1, the speed knob's det
 void updatePalette() {
   hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
   hsv2rgb_rainbow(CHSV(g_hotHue, g_hotSat, 255), hotC);
+}
+
+/* The brightness this frame goes out at: the level knob's, raised toward the
+   palette's ceiling while chaos rages, so the level knob is ignored at the
+   height of it. */
+uint8_t frameBrightness() {
+  uint8_t ceil8 = scale8(MASTER, g_trim);
+  uint8_t head  = ceil8 > g_bright ? ceil8 - g_bright : 0;
+  return g_bright + scale8(head, g_chaos);
 }
 
 /* ── clock ──────────────────────────────────────────────────── */
@@ -2055,8 +2063,8 @@ void makeStrike(uint8_t slot, uint8_t segIdx, uint32_t t0) {
     t += dur + rndR(RGAP_MIN, RGAP_MAX + 1);
   }
   s.lastEnd = s.strokes[s.nStrokes - 1].at + s.strokes[s.nStrokes - 1].dur;
-  uint16_t g = GLOW_MS + rndR(0, 200); g = (g > 80) ? g - 80 : 40;
-  s.glowMs = g;
+  uint16_t g = GLOW_MS + rndR(0, 200);
+  s.glowMs = g > 120 ? g - 80 : 40;      // GLOW_MS - 80 to + 119, never under 40
   s.total  = s.lastEnd + (s.glowMs > CLOUD_MS ? s.glowMs : CLOUD_MS);
   s.forkMask = 1;                       // the return stroke always forks
   for (uint8_t k = 1; k < s.nStrokes; k++)
@@ -2133,7 +2141,10 @@ void renderChannel(const Strike &s, uint16_t e, uint8_t segIdx,
     uint16_t le = e - leaderStart;
     uint16_t head = (uint16_t)(((uint32_t)le * len) / leaderDur);
     for (uint16_t i = 0; i <= head && i < len; i++) {
-      uint8_t b = qsub8(240, (uint8_t)((head - i) * TRAIL));
+      // fades TRAIL per pixel behind the head; wider than 8 bits on purpose,
+      // so a long trail runs out at zero instead of wrapping back to bright
+      uint16_t fade = (head - i) * TRAIL;
+      uint8_t b = fade < 240 ? 240 - fade : 0;
       if (b) addLed(start + i, scale8(b, dim), 200, i, len);
     }
   }
@@ -2236,14 +2247,14 @@ static void knobPercent(char *buf, size_t n, uint8_t idx, uint8_t steps) {
            idx == 0 ? " (min)" : idx == steps - 1 ? " (max)" : "");
 }
 
-void logDashboard(uint32_t realNow) {
+/* drawmW is what the strip drew for the frame just sent, from stripShow(). */
+void logDashboard(uint32_t realNow, uint32_t drawmW) {
 #if STORM_LOG
   static char     lastLine[128] = "";
   static uint32_t lastAt = 0, frames = 0, peakmW = 0, fpsAt = 0, fps = 0;
 
   frames++;
-  uint32_t mw = calculate_unscaled_power_mW(leds, NUM_LEDS);
-  if (mw > peakmW) peakmW = mw;
+  if (drawmW > peakmW) peakmW = drawmW;
   if (realNow - fpsAt >= 1000) {
     fps = frames * 1000UL / (realNow - fpsAt ? realNow - fpsAt : 1);
     frames = 0; fpsAt = realNow;
@@ -2292,20 +2303,36 @@ void logDashboard(uint32_t realNow) {
 #endif
   peakmW = 0;                    // peak is per line, not since boot
 #else
-  (void)realNow;
+  (void)realNow; (void)drawmW;
 #endif
 }
 
-/* ── main loop ──────────────────────────────────────────────── */
-// forks are never struck directly — they light because their parent did
-uint8_t randomBolt() {
+/* ── scheduler ──────────────────────────────────────────────── */
+/* Root channels only: forks are never struck directly, they light because
+   their parent did. Draws from random16() in the same order as the bench, so
+   the same seed replays the same storm. */
+void scheduleStrikes(uint32_t now) {
+  if (now < nextStrikeAt) return;
+
   uint8_t bolts[NUM_SEGMENTS], n = 0;
   for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
     Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));
-    if (sg.isBolt && sg.parent < 0) bolts[n++] = i;
+    if (sg.isBolt && sg.parent < 0 && sg.len > 1) bolts[n++] = i;
   }
-  return n ? bolts[random8() % n] : 0;
+  if (n) {
+    uint8_t pick = rndR(0, n);
+    trigger(bolts[pick], now);
+    if (random8() < g_dblChance && n > 1) {          // a second, different channel
+      uint8_t other = rndR(0, n);
+      if (other == pick) other = (other + 1) % n;
+      uint16_t lag = rndR(40, CLUSTER_MS + 1);
+      trigger(bolts[other], now + lag);
+    }
+  }
+  nextStrikeAt = now + rndR(g_gapMin, g_gapMax + 1);
 }
+
+/* ── boot banner ────────────────────────────────────────────── */
 
 void logBoot() {
 #if STORM_LOG
@@ -2331,15 +2358,88 @@ void logBoot() {
 #endif
 }
 `;
+const FILE_STRIP_H = `/* LED output, generated by Bolt Bench — overwritten on export.
+
+   The wire and nothing else. storm.h renders a finished frame into leds[];
+   this applies brightness, white balance and the power cap, and sends it.
+
+   The colour math stays FastLED's, because the bench transcribes it bit for
+   bit. The driver is Adafruit NeoPixel. FastLED 3.10's ESP32 output lit the
+   right number of pixels but every colour came out white, and NeoPixel on the
+   same board and strand showed the colours correctly. */
+#pragma once
+#include <Adafruit_NeoPixel.h>
+#include <FastLED.h>
+#include "config.h"
+#include "layout.h"
+
+/* FastLED's power model, so the figures match its calculate_*_power_mW():
+   milliwatts per channel at full drive, and per pixel at rest. */
+#define STRIP_MW_RED    80
+#define STRIP_MW_GREEN  55
+#define STRIP_MW_BLUE   75
+#define STRIP_MW_DARK    5
+#define STRIP_VOLTS      5
+#define STRIP_DARK_MW   ((uint32_t)NUM_LEDS * STRIP_MW_DARK)   // the whole strip, all off
+
+static Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, LED_TYPE);
+
+void stripBegin() {
+  strip.begin();
+  strip.show();                        // all off until the first frame
+}
+
+/* Brightness first, exactly as the bench applies it, then white balance. */
+static inline CRGB stripColor(const CRGB &c, uint8_t bright, const CRGB &wb) {
+  return CRGB(scale8(scale8(c.r, bright), wb.r),
+              scale8(scale8(c.g, bright), wb.g),
+              scale8(scale8(c.b, bright), wb.b));
+}
+
+/* What the lit pixels draw, in mW, on top of STRIP_DARK_MW. */
+static uint32_t stripLit_mW(const CRGB *px, uint8_t bright, const CRGB &wb) {
+  uint32_t r = 0, g = 0, b = 0;
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    CRGB c = stripColor(px[i], bright, wb);
+    r += c.r; g += c.g; b += c.b;
+  }
+  return (r * STRIP_MW_RED + g * STRIP_MW_GREEN + b * STRIP_MW_BLUE) >> 8;
+}
+
+/* Sends the frame and returns what the strip draws, in mW. With LED_MAX_MA
+   set, a frame that would draw more is dimmed as a whole to fit, the way
+   FastLED's setMaxPowerInVoltsAndMilliamps() does. */
+uint32_t stripShow(const CRGB *px, uint8_t bright) {
+  const CRGB wb(LED_CORRECTION);
+  uint32_t lit = stripLit_mW(px, bright, wb);
+
+#if LED_MAX_MA
+  const uint32_t budget = (uint32_t)LED_MAX_MA * STRIP_VOLTS;
+  const uint32_t litBudget = budget > STRIP_DARK_MW ? budget - STRIP_DARK_MW : 0;
+  if (lit > litBudget) {
+    bright = (uint8_t)((uint32_t)bright * litBudget / lit);
+    lit = stripLit_mW(px, bright, wb);
+  }
+#endif
+
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    CRGB c = stripColor(px[i], bright, wb);
+    strip.setPixelColor(i, c.r, c.g, c.b);   // NeoPixel reorders for LED_TYPE
+  }
+  strip.show();
+  return lit + STRIP_DARK_MW;
+}
+`;
 const FILE_MAIN_CPP = `/* ─────────────────────────────────────────────────────────────
    StormCloud — generated by Bolt Bench
 
-   Four of the five files here are regenerated wholesale every time you
-   export from the bench: layout.h, tuning.h, storm.h and this one.
-   config.h is yours and is never overwritten — pins, logging and
-   palettes live there.
+   Five of the seven files here are regenerated wholesale every time you
+   export from the bench: layout.h, tuning.h, storm.h, strip.h and this
+   one. config.h and controls.h are yours and are never overwritten —
+   pins, logging, palettes and the knobs live there.
    ───────────────────────────────────────────────────────────── */
 #include "storm.h"
+#include "strip.h"
 #include "controls.h"
 
 void setup() {
@@ -2348,15 +2448,10 @@ void setup() {
   uint32_t waited = millis();                 // USB CDC needs a moment to enumerate,
   while (!Serial && millis() - waited < 1500) { }   // but never hang without a host
 #endif
-  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  g_bright = scale8(MASTER, TRIM);
-  FastLED.setBrightness(g_bright);
+  stripBegin();
+  g_bright = scale8(MASTER, TRIM);      // until controlsBegin() reads the level knob
   updatePalette();
-  // 300 px at full white is ~18 A at 5 V and this animation really does flash
-  // most of the cloud at once. Uncomment to let FastLED hold the peak down:
-  // FastLED.setMaxPowerInVoltsAndMilliamps(5, 4000);
   random16_set_seed(0x1337);            // same seed the bench previewed
-  for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
   logBoot();
   controlsBegin();
   chaosBegin();
@@ -2368,22 +2463,15 @@ void loop() {
   uint32_t now = stormClock();     // virtual: the speed knob stretches this
   chaosPoll(millis(), now);        // button in real time, strikes in storm time
   moodUpdate(millis());
+
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   renderAmbient(now);
-
-  if (now >= nextStrikeAt) {
-    uint8_t seg = randomBolt();
-    trigger(seg, now);
-    if (random8() < g_dblChance) trigger(randomBolt(), now + rndR(40, CLUSTER_MS + 1));
-    nextStrikeAt = now + rndR(g_gapMin, g_gapMax + 1);
-  }
-
+  scheduleStrikes(now);
   for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
 
-  logDashboard(millis());     // wall-clock, not the speed-scaled storm clock
-
-  FastLED.show();
+  uint32_t drawmW = stripShow(leds, frameBrightness());
+  logDashboard(millis(), drawmW);  // wall-clock, not the speed-scaled storm clock
 }
 `;
 
@@ -2434,11 +2522,12 @@ ${tableU8(nrmY, NUM_LEDS, 20)}
 
 function fileTuningH(){
   const d = (k, v) => `#define ${k.padEnd(13)} ${v}`;
+  const dc = (k, v, note) => `${d(k, v).padEnd(27)}// ${note}`;
   return `/* Animation parameters, generated by Bolt Bench — overwritten on export. */
 #pragma once
 
-${d('GAP_MIN', P.gapMin)}
-${d('GAP_MAX', P.gapMax)}
+${d('GAP_MIN', Math.min(P.gapMin, P.gapMax))}
+${d('GAP_MAX', Math.max(P.gapMin, P.gapMax))}
 ${d('DBL_CHANCE', P.dblChance)}
 ${d('CLUSTER_MS', P.clusterMs)}
 ${d('LEAD_MIN', Math.min(P.leadMin, P.leadMax))}
@@ -2473,11 +2562,11 @@ ${d('MASTER', P.master)}
    TRIM scales MASTER per palette — green sits where the eye is most
    sensitive, so it needs pulling back relative to blue.
    See PALETTES[] in config.h for starting points. */
-${d('HUE', P.hue)}      // FastLED hue: 0 red, 64 yellow, 96 green, 160 blue, 192 purple
-${d('HOT_HUE', P.hotHue)}      // peak hue; equal to HUE means no shift along the heat ramp
-${d('SAT', P.sat)}
-${d('HOT_SAT', P.hotSat)}
-${d('TRIM', P.trim)}
+${dc('HUE', P.hue, 'FastLED hue: 0 red, 64 yellow, 96 green, 160 blue, 192 purple')}
+${dc('HOT_HUE', P.hotHue, 'peak hue; equal to HUE means no shift along the heat ramp')}
+${dc('SAT', P.sat, 'afterglow saturation; ~200 for a storm blue you can see')}
+${dc('HOT_SAT', P.hotSat, 'saturation at the white-hot peak; keep low')}
+${dc('TRIM', P.trim, 'per-palette brightness trim applied to MASTER')}
 `;
 }
 
@@ -2488,6 +2577,7 @@ function buildFiles(){
     'layout.h':    fileLayoutH(),
     'tuning.h':    fileTuningH(),
     'storm.h':     FILE_STORM_H,
+    'strip.h':     FILE_STRIP_H,
     'main.cpp':    FILE_MAIN_CPP,
     'layout.json': layoutJSON(),
   };

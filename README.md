@@ -1,6 +1,6 @@
 # Bolt Bench
 
-A browser bench for designing lightning animations on a 300-pixel addressable LED strip, and for exporting the result as a FastLED sketch that runs the same math.
+A browser bench for designing lightning animations on a 300-pixel addressable LED strip, and for exporting the result as an ESP32 sketch that runs the same math.
 
 Built for a wearable cloud costume: an LED rope stuffed into polyfill batting, with bolts hanging below.
 
@@ -165,7 +165,7 @@ Four presets — Distant storm, Rolling, Direct hit, Heat lightning — are star
 
 ## Export
 
-The **Export** panel emits five source files plus the layout. They are split along the line of **ownership**, not by size — which is what makes re-exporting safe:
+The **Export** panel emits seven source files plus the layout. They are split along the line of **ownership**, not by size — which is what makes re-exporting safe:
 
 | File | Owner | Overwritten on export |
 |---|---|---|
@@ -173,10 +173,13 @@ The **Export** panel emits five source files plus the layout. They are split alo
 | `controls.h` | **you** — pot pins and mapping | never; starter only |
 | `layout.h` | generator — segments, `LED_X`/`LED_Y` | wholesale |
 | `tuning.h` | generator — animation parameters | wholesale |
-| `storm.h` | generator — the engine | wholesale |
+| `storm.h` | generator — the engine: renders each frame into `leds[]` | wholesale |
+| `strip.h` | generator — the output: brightness, white balance, power cap, the wire | wholesale |
 | `main.cpp` | generator — `setup()` / `loop()` | wholesale |
 
-Drop the four generated files into `src/` after any export; leave your `config.h` alone.
+Drop the five generated files into `src/` after any export; leave your `config.h` and `controls.h` alone.
+
+**The colour math is FastLED's; the driver is not.** `storm.h` uses FastLED's `lib8tion`, `CRGB` and `hsv2rgb_rainbow`, because the bench transcribes them bit for bit. `strip.h` sends the frame with Adafruit NeoPixel. FastLED 3.10's ESP32 output lit the right number of pixels on this board, but every colour came out white; NeoPixel on the same board and strand showed the colours correctly. FastLED is pinned in `platformio.ini` so the math cannot drift under the bench.
 
 `layout.json` round-trips back into the tool via **Import layout JSON**, so you can version your routing or move it between machines.
 
@@ -207,7 +210,7 @@ Fields are fixed-width on purpose. A dashboard whose columns jump around is unre
 
 Two lines still print outside this. `DROPPED` is a fault rather than a state — it means the storm is scheduling faster than `MAX_STRIKES` can render — and the boot banner dumps the segment table once so you can check the firmware's idea of the routing against the bench's.
 
-That peak draw figure comes from FastLED's own `calculate_unscaled_power_mW`, so it is the number to watch against whatever supply you end up using — see below.
+The `mA` figure is the peak draw since the previous line, measured on what `strip.h` actually sends, after brightness, white balance and any cap. It uses FastLED's per-channel power model, so it is the number to watch against whatever supply you end up using — see below.
 
 ### Live dashboard
 
@@ -238,18 +241,18 @@ To work on the page without a board, use `node dashboard/server.js --demo`, whic
 
 What that means in practice:
 
-- Cap the draw with `FastLED.setMaxPowerInVoltsAndMilliamps(5, N)` rather than trusting the animation to behave. This is the single most useful line you can add.
+- Cap the draw with `LED_MAX_MA` in `config.h` rather than trusting the animation to behave. A frame that would draw more is dimmed as a whole to fit. It ships at `0` (no cap); set it to what your supply delivers. This is the single most useful line you can change.
 - Inject power at both ends of the strip, and at the midpoint if you can reach it.
 - Put a 1000 µF electrolytic across 5 V and ground at the strip, and a 330–470 Ω resistor in series with the data line.
 - Level-shift 3.3 V data up to 5 V on ESP32 and RP2040.
 
 A sagging supply does not fail cleanly — it produces glitching and colour corruption that looks exactly like a software bug, and will cost you an evening.
 
-Default pin is `LED_PIN 6`, type `WS2812B`, order `GRB`. Change them at the top of the sketch.
+The strip is on `GPIO18` (`LED_PIN`), WS2812B with `GRB` order (`LED_TYPE`), in `config.h`. Not GPIO2: that pin also drives the DevKit's on-board blue LED, which loads the data line, and it is a boot strapping pin.
 
 ## Known limits
 
-- **The sketch compiles but has never run on hardware.** `pio run` succeeds clean for `esp32dev` with FastLED 3.9 — no warnings — so the syntax and API use are verified. Timing, colour and the power figures are still unproven on real pixels.
+- **Dithering is gone with FastLED's driver.** FastLED's `show()` added temporal dithering at low brightness; NeoPixel does not, so the dimmest fades step slightly more coarsely than they did.
 - Fork nesting is capped at depth 3, in both the preview and the sketch.
 - `MAX_STRIKES` is 6 and `MAX_STROKES` is 6. Push the storm parameters hard enough and strikes will be dropped rather than queued.
 - Preview-only controls — dot size, bloom — model light diffusing through batting. They are not exported, because the controller has no equivalent.
@@ -318,7 +321,7 @@ pio run -t upload       # flash
 pio device monitor      # watch the log (and feed the live dashboard, if running)
 ```
 
-`platformio.ini` targets `esp32dev`. Re-exporting overwrites four of the five source files, but never `config.h` — so your pin choice, logging settings and palettes survive.
+`platformio.ini` targets `esp32dev`. Re-exporting overwrites five of the seven source files, but never `config.h` or `controls.h` — so your pin choice, logging settings, palettes and knobs survive.
 
 ## Files
 
@@ -348,7 +351,8 @@ lightning-simulator/
     ├── controls.h    YOURS: potentiometer pins and mapping — never regenerated
     ├── layout.h      generated: segment table, pixel coordinates
     ├── tuning.h      generated: animation parameters and palette
-    ├── storm.h       generated: the engine
+    ├── storm.h       generated: the engine, renders each frame into leds[]
+    ├── strip.h       generated: sends leds[] to the strip (NeoPixel)
     ├── main.cpp      generated: setup() and loop()
     └── layout.json   exported routing, re-importable into the bench
 ```

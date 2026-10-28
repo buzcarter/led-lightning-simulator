@@ -24,8 +24,8 @@
 #endif
 
 /* ADC1 only. ADC2 (GPIO 0/2/4/12-15/25-27) stops working the moment WiFi
-   is enabled, and GPIO2 is the strip anyway. GPIO34 is input-only, which
-   is a feature for an analog input — it cannot be driven by accident. */
+   is enabled. GPIO34 is input-only, which is a feature for an analog
+   input — it cannot be driven by accident. */
 #define POT_PALETTE_PIN  GPIO_NUM_32
 #define POT_SPEED_PIN    GPIO_NUM_33
 #define POT_LEVEL_PIN    GPIO_NUM_34
@@ -56,8 +56,6 @@ static const uint16_t SPEED_Q8[SPEED_STEPS] = {
    whole costume look broken is rarely what you want at the end of the
    travel. Set to 0 to turn it into an off switch. */
 #define POT_LEVEL_FLOOR  20
-
-#define POT_LOG_MS       400
 
 /* ── mood LED ───────────────────────────────────────────────── */
 /* A discrete 4-leg RGB LED on three PWM channels, showing which palette is
@@ -240,21 +238,16 @@ void chaosPoll(uint32_t realNow, uint32_t stormNow) {
   if (e >= (uint32_t)CHAOS_HOLD_MS + CHAOS_DECAY_MS) {
     chaosAt = 0; g_chaos = 0;
     g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
-    FastLED.setBrightness(g_bright);
     return;
   }
   uint8_t amt = 255;
   if (e > CHAOS_HOLD_MS)
     amt = (uint8_t)(255 - (uint32_t)(e - CHAOS_HOLD_MS) * 255 / CHAOS_DECAY_MS);
-  g_chaos = amt;
+  g_chaos = amt;                                     // frameBrightness() reads this too
 
   g_gapMin    = chaosLerp16(GAP_MIN, CHAOS_GAP_MIN, amt);
   g_gapMax    = chaosLerp16(GAP_MAX, CHAOS_GAP_MAX, amt);
   g_dblChance = (uint8_t)chaosLerp16(DBL_CHANCE, 255, amt);
-
-  uint8_t ceil8 = scale8(MASTER, g_trim);            // ignore the level knob while it rages
-  uint8_t head  = ceil8 > g_bright ? ceil8 - g_bright : 0;
-  FastLED.setBrightness((uint8_t)(g_bright + scale8(head, amt)));
 }
 
 #else
@@ -301,7 +294,6 @@ void controlsUpdate(bool force) {
      fewer palettes than detents they repeat round the dial, so every click
      still changes something; add palettes in config.h to fill it. */
   uint8_t pal = potIndex(potPalette, 255) % NUM_PALETTES;
-  bool trimChanged = false;
   if (force || pal != g_palette) {
     g_palette = pal;
     g_hue    = PALETTES[pal].hue;
@@ -310,17 +302,16 @@ void controlsUpdate(bool force) {
     g_hotSat = PALETTES[pal].hotSat;
     g_trim   = PALETTES[pal].trim;
     updatePalette();
-    trimChanged = true;
   }
 
   g_speed   = potIndex(potSpeed, SPEED_STEPS);
   g_speedQ8 = SPEED_Q8[g_speed];
 
+  /* Level spans POT_LEVEL_FLOOR up to the palette's ceiling, MASTER x TRIM. */
   g_level = potIndex(potLevel, LEVEL_STEPS);
   uint8_t ceil8 = scale8(MASTER, g_trim);
   uint8_t span  = ceil8 > POT_LEVEL_FLOOR ? ceil8 - POT_LEVEL_FLOOR : 0;
-  uint8_t b = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
-  if (force || trimChanged || b != g_bright) { g_bright = b; FastLED.setBrightness(b); }
+  g_bright = (uint8_t)(POT_LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
 
   g_potRaw[0] = potPalette.raw();
   g_potRaw[1] = potSpeed.raw();

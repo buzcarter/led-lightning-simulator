@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dashboard/server.js"],
+      "port": 7778
+    },
+    {
+      "name": "dashboard-demo",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["STORM_DASH_HTTP=7788", "STORM_DASH_UDP=7787", "node", "dashboard/server.js", "--demo"],
+      "port": 7788
+    }
+  ]
+}
