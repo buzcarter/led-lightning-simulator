@@ -1719,6 +1719,12 @@ void chaosFire(uint32_t realNow, uint32_t stormNow) {
   LOG("[storm] CHAOS -- %u channels\\n", (unsigned)k);
 }
 
+/* Back to the knobs at once, wherever the envelope was. */
+void chaosCancel() {
+  chaosAt = 0; g_chaos = 0;
+  g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
+}
+
 void chaosBegin() {
   pinMode(CHAOS_PIN, INPUT_PULLUP);
   LOG("[storm] chaos button GPIO%u to GND\\n", (unsigned)CHAOS_PIN);
@@ -1738,8 +1744,7 @@ void chaosPoll(uint32_t realNow, uint32_t stormNow) {
   if (!chaosAt) return;
   uint32_t e = realNow - chaosAt;
   if (e >= (uint32_t)CHAOS_HOLD_MS + CHAOS_DECAY_MS) {
-    chaosAt = 0; g_chaos = 0;
-    g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
+    chaosCancel();
     return;
   }
   uint8_t amt = 255;
@@ -1753,8 +1758,40 @@ void chaosPoll(uint32_t realNow, uint32_t stormNow) {
 }
 
 #else
+inline void chaosCancel() {}
 inline void chaosBegin() {}
 inline void chaosPoll(uint32_t, uint32_t) {}
+#endif
+
+/* ── console ────────────────────────────────────────────────── */
+/* Keys typed into the serial monitor (pio device monitor passes them through).
+
+     h      hold mode on/off: one segment lit steady, the storm paused
+     0-9    while holding, the segment to light, in SEGMENTS[] order
+
+   Hold starts on segment 0, the cloud body. Needs STORM_LOG, which is what
+   opens the serial port. */
+#if STORM_LOG
+
+void consoleBegin() {
+  LOG("[keys]  h hold one segment, then 0-%u to pick it\\n", (unsigned)(NUM_SEGMENTS - 1));
+}
+
+void consolePoll() {
+  while (Serial.available()) {
+    int c = Serial.read();
+    if (c == 'h' || c == 'H') {
+      if (!g_hold) chaosCancel();          // so hold shows the level knob's brightness
+      holdSet(!g_hold);
+    } else if (g_hold && c >= '0' && c <= '9') {
+      holdSelect((uint8_t)(c - '0'));
+    }
+  }
+}
+
+#else
+inline void consoleBegin() {}
+inline void consolePoll() {}
 #endif
 
 #if POTS_ENABLE
@@ -2332,8 +2369,43 @@ void scheduleStrikes(uint32_t now) {
   nextStrikeAt = now + rndR(g_gapMin, g_gapMax + 1);
 }
 
-/* ── boot banner ────────────────────────────────────────────── */
+/* ── hold ───────────────────────────────────────────────────── */
+/* One segment lit steady, everything else dark, for checking the wiring
+   against the bench's routing. The storm is paused rather than hidden: its
+   clock stops, and it resumes from a clear sky when hold ends. */
+bool    g_hold    = false;
+uint8_t g_holdSeg = 0;                 // index into SEGMENTS[]
 
+static void logHold() {
+  if (!g_hold) { LOG("[hold]  off\\n"); return; }
+  Segment sg; memcpy_P(&sg, &SEGMENTS[g_holdSeg], sizeof(Segment));
+  LOG("[hold]  %u %s, pixels %u-%u (%u)\\n", (unsigned)g_holdSeg, sg.name,
+      (unsigned)sg.start, (unsigned)(sg.start + sg.len - 1), (unsigned)sg.len);
+}
+
+void holdSet(bool on) {
+  g_hold = on;
+  g_holdSeg = 0;
+  for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
+  logHold();
+}
+
+void holdSelect(uint8_t seg) {
+  if (seg >= NUM_SEGMENTS) {
+    LOG("[hold]  no segment %u; 0-%u\\n", (unsigned)seg, (unsigned)(NUM_SEGMENTS - 1));
+    return;
+  }
+  g_holdSeg = seg;
+  logHold();
+}
+
+/* In the palette's peak colour, so it reads near white whatever the palette. */
+void renderHold() {
+  Segment sg; memcpy_P(&sg, &SEGMENTS[g_holdSeg], sizeof(Segment));
+  for (uint16_t j = sg.start; j < sg.start + sg.len && j < NUM_LEDS; j++) leds[j] = hotC;
+}
+
+/* ── boot banner ────────────────────────────────────────────── */
 void logBoot() {
 #if STORM_LOG
   LOG("\\n[storm] StormCloud ready — %u px, %u segments, pin %u, master %u\\n",
@@ -2456,19 +2528,25 @@ void setup() {
   controlsBegin();
   chaosBegin();
   moodBegin();
+  consoleBegin();
 }
 
 void loop() {
+  consolePoll();
   controlsUpdate(false);
-  uint32_t now = stormClock();     // virtual: the speed knob stretches this
-  chaosPoll(millis(), now);        // button in real time, strikes in storm time
-  moodUpdate(millis());
 
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
-  renderAmbient(now);
-  scheduleStrikes(now);
-  for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
+  if (g_hold) {
+    renderHold();                  // storm paused: its clock does not advance
+  } else {
+    uint32_t now = stormClock();   // virtual: the speed knob stretches this
+    chaosPoll(millis(), now);      // button in real time, strikes in storm time
+    renderAmbient(now);
+    scheduleStrikes(now);
+    for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
+  }
+  moodUpdate(millis());
 
   uint32_t drawmW = stripShow(leds, frameBrightness());
   logDashboard(millis(), drawmW);  // wall-clock, not the speed-scaled storm clock

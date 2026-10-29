@@ -399,8 +399,43 @@ void scheduleStrikes(uint32_t now) {
   nextStrikeAt = now + rndR(g_gapMin, g_gapMax + 1);
 }
 
-/* ── boot banner ────────────────────────────────────────────── */
+/* ── hold ───────────────────────────────────────────────────── */
+/* One segment lit steady, everything else dark, for checking the wiring
+   against the bench's routing. The storm is paused rather than hidden: its
+   clock stops, and it resumes from a clear sky when hold ends. */
+bool    g_hold    = false;
+uint8_t g_holdSeg = 0;                 // index into SEGMENTS[]
 
+static void logHold() {
+  if (!g_hold) { LOG("[hold]  off\n"); return; }
+  Segment sg; memcpy_P(&sg, &SEGMENTS[g_holdSeg], sizeof(Segment));
+  LOG("[hold]  %u %s, pixels %u-%u (%u)\n", (unsigned)g_holdSeg, sg.name,
+      (unsigned)sg.start, (unsigned)(sg.start + sg.len - 1), (unsigned)sg.len);
+}
+
+void holdSet(bool on) {
+  g_hold = on;
+  g_holdSeg = 0;
+  for (uint8_t i = 0; i < MAX_STRIKES; i++) strikes[i].active = false;
+  logHold();
+}
+
+void holdSelect(uint8_t seg) {
+  if (seg >= NUM_SEGMENTS) {
+    LOG("[hold]  no segment %u; 0-%u\n", (unsigned)seg, (unsigned)(NUM_SEGMENTS - 1));
+    return;
+  }
+  g_holdSeg = seg;
+  logHold();
+}
+
+/* In the palette's peak colour, so it reads near white whatever the palette. */
+void renderHold() {
+  Segment sg; memcpy_P(&sg, &SEGMENTS[g_holdSeg], sizeof(Segment));
+  for (uint16_t j = sg.start; j < sg.start + sg.len && j < NUM_LEDS; j++) leds[j] = hotC;
+}
+
+/* ── boot banner ────────────────────────────────────────────── */
 void logBoot() {
 #if STORM_LOG
   LOG("\n[storm] StormCloud ready — %u px, %u segments, pin %u, master %u\n",
