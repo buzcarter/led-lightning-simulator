@@ -13,13 +13,13 @@ CRGB leds[NUM_LEDS];
 CRGB coolC, hotC;
 
 /* Runtime copies of the tuning.h values, seeded from them at boot. Anything
-   a knob can move has to live in RAM rather than as a #define; everything
-   else stays a compile-time constant. Silent — updatePalette() is called on
-   every hue change, so logging here would flood the port while you turn. */
-/* Level runs in detents rather than continuously: one stop per position of
-   the 10-position knob, 0..100% in ninths (0, 11, 22 ... 100). Both
-   brightness now and storm severity later read g_level, so they share one
-   set of detents. */
+   the controls can move has to live in RAM rather than as a #define;
+   everything else stays a compile-time constant.
+
+   Speed and level run in steps rather than continuously, ten of each, set
+   from the keyboard (controls.h). Level is 0..100% in ninths (0, 11, 22 ...
+   100); both brightness now and storm severity later read g_level, so they
+   share one set of steps. */
 #define LEVEL_STEPS   10
 #define SPEED_STEPS   10
 
@@ -28,10 +28,9 @@ uint8_t  g_sat    = SAT;
 uint8_t  g_hotHue = HOT_HUE;
 uint8_t  g_hotSat = HOT_SAT;
 uint8_t  g_bright = 0;                 // resolved in setup()
-uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level knob's detent
+uint8_t  g_level  = LEVEL_STEPS - 1;   // 0..LEVEL_STEPS-1, the level step
 uint8_t  g_trim   = TRIM;              // brightness trim of the live palette
 uint8_t  g_palette = 0;                // index into PALETTES[] in config.h
-uint16_t g_potRaw[3] = {0, 0, 0};      // palette/speed/level, raw ADC 0..4095, for STORM_LOG_RAW
 
 /* Scheduler settings the chaos button borrows for a few seconds. Seeded from
    tuning.h; the severity crossfade will drive these too when it lands. */
@@ -39,18 +38,17 @@ uint16_t g_gapMin    = GAP_MIN;
 uint16_t g_gapMax    = GAP_MAX;
 uint8_t  g_dblChance = DBL_CHANCE;
 uint8_t  g_chaos     = 0;              // 0..255, position in the chaos envelope
-uint32_t g_strikeAt  = 0;              // millis of the last strike, for the mood LED
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
-uint8_t  g_speed   = SPEED_STEPS / 2;  // 0..SPEED_STEPS-1, the speed knob's detent; 5 is 1.00x
+uint8_t  g_speed   = SPEED_STEPS / 2;  // 0..SPEED_STEPS-1, the speed step; 5 is 1.00x
 
 void updatePalette() {
   hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
   hsv2rgb_rainbow(CHSV(g_hotHue, g_hotSat, 255), hotC);
 }
 
-/* The brightness this frame goes out at: the level knob's, raised toward the
-   palette's ceiling while chaos rages, so the level knob is ignored at the
-   height of it. */
+/* The brightness this frame goes out at: the level setting's, raised toward
+   the palette's ceiling while chaos rages, so level is ignored at the height
+   of it. */
 uint8_t frameBrightness() {
   uint8_t ceil8 = scale8(MASTER, g_trim);
   uint8_t head  = ceil8 > g_bright ? ceil8 - g_bright : 0;
@@ -59,7 +57,7 @@ uint8_t frameBrightness() {
 
 /* ── clock ──────────────────────────────────────────────────── */
 /* A virtual clock, not scaled millis(). Scaling millis() directly would
-   teleport every strike in flight the instant the speed knob moved; this
+   teleport every strike in flight the instant the speed changed; this
    accumulates instead, so a speed change is smooth. It is the same thing
    the bench does with simTime += dt * speed. */
 uint32_t stormClock() {
@@ -154,7 +152,6 @@ void trigger(uint8_t segIdx, uint32_t at) {
     return;
   }
   makeStrike(slot, segIdx, at);
-  g_strikeAt = millis();
 }
 
 /* ── per-pixel accumulate ───────────────────────────────────── */
@@ -301,15 +298,15 @@ void renderAmbient(uint32_t now) {
 /* ── dashboard ──────────────────────────────────────────────── */
 /* One line, rewritten when the state a person would notice changes, and
    refreshed on a slow timer while it does not. Not a log: no scrollback of
-   every strike and every knob nudge, just the current picture. Only DROPPED
+   every strike and every key press, just the current picture. Only DROPPED
    still prints on its own, because it is a fault rather than a state.
 
-   Grouped by what you are looking for: the three knobs first, then the
+   Grouped by what you are looking for: the three controls first, then the
    strike in flight, then the diagnostics. */
 
-/* A knob position as a percentage of its travel, the way a person counts
-   clicks, rather than the multiplier or brightness it maps to. */
-static void knobPercent(char *buf, size_t n, uint8_t idx, uint8_t steps) {
+/* A step as a percentage of the range, the way a person counts presses,
+   rather than the multiplier or brightness it maps to. */
+static void stepPercent(char *buf, size_t n, uint8_t idx, uint8_t steps) {
   snprintf(buf, n, "%u%%%s", (unsigned)((idx + 1) * 100 / steps),
            idx == 0 ? " (min)" : idx == steps - 1 ? " (max)" : "");
 }
@@ -344,9 +341,9 @@ void logDashboard(uint32_t realNow, uint32_t drawmW) {
   }
 
   char spd[12], lvl[12];
-  knobPercent(spd, sizeof spd, g_speed, SPEED_STEPS);
+  stepPercent(spd, sizeof spd, g_speed, SPEED_STEPS);
   if (g_chaos) snprintf(lvl, sizeof lvl, "CHAOS");
-  else         knobPercent(lvl, sizeof lvl, g_level, LEVEL_STEPS);
+  else         stepPercent(lvl, sizeof lvl, g_level, LEVEL_STEPS);
 
   char line[128];
   snprintf(line, sizeof line,
@@ -361,13 +358,7 @@ void logDashboard(uint32_t realNow, uint32_t drawmW) {
   lastLine[sizeof lastLine - 1] = 0;
   lastAt = realNow;
 
-#if STORM_LOG_RAW
-  LOG("%s | fps: %3lu  mA: %4lu | raw: %4u/%4u/%4u\n", line,
-      (unsigned long)fps, (unsigned long)(peakmW / 5),
-      (unsigned)g_potRaw[0], (unsigned)g_potRaw[1], (unsigned)g_potRaw[2]);
-#else
   LOG("%s | fps: %3lu  mA: %4lu\n", line, (unsigned long)fps, (unsigned long)(peakmW / 5));
-#endif
   peakmW = 0;                    // peak is per line, not since boot
 #else
   (void)realNow; (void)drawmW;

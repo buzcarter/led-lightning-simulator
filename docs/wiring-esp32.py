@@ -43,16 +43,16 @@ LEFT = [  # silkscreen, tag text, kind
     ("EN",  "RESET",  "ctl"),
     ("VP",  "GPIO36", "in"),
     ("VN",  "GPIO39", "in"),
-    ("D34", "GPIO34", "pot"),
+    ("D34", "GPIO34", "io"),
     ("D35", "GPIO35", "in"),
-    ("D32", "GPIO32", "pot"),
-    ("D33", "GPIO33", "pot"),
-    ("D25", "GPIO25", "mood"),
-    ("D26", "GPIO26", "mood"),
+    ("D32", "GPIO32", "io"),
+    ("D33", "GPIO33", "io"),
+    ("D25", "GPIO25", "io"),
+    ("D26", "GPIO26", "io"),
     ("D27", "GPIO27", "chaos"),
     ("D14", "GPIO14", "io"),
     ("D12", "GPIO12", "io"),
-    ("D13", "GPIO13", "mood"),
+    ("D13", "GPIO13", "io"),
     ("GND", "GND",    "gnd"),
     ("VIN", "5V IN",  "v5"),
 ]
@@ -71,7 +71,7 @@ RIGHT = [
     ("D2",  "GPIO2",  "io"),
     ("D15", "GPIO15", "io"),
     ("GND", "GND",    "gnd"),
-    ("3V3", "3V3 OUT", "v33"),
+    ("3V3", "3V3 OUT", "io"),
 ]
 # input-only pins (no output, no pull-ups) get a dashed tag
 INPUT_ONLY = {"GPIO34", "GPIO35", "GPIO36", "GPIO39"}
@@ -82,12 +82,12 @@ add('''<title>StormCloud wiring: ESP32 DevKit V1</title>
 <style>
   svg{--bg:#fbfaf7;--ink:#1d2024;--ink2:#5a6068;--ink3:#8d939b;--rule:#d9d6cf;
       --board:#1f2328;--board-ink:#e9ecef;--module:#c9ccd1;--module-ink:#2a2e33;
-      --v33:#c8463a;--v5:#d07a12;--gnd:#30343a;--pot:#2b7cb5;--mood:#8a4fbf;
+      --v33:#c8463a;--v5:#d07a12;--gnd:#30343a;
       --chaos:#b3811c;--strip:#3f8f5a;--io:#9aa0a8}
   @media (prefers-color-scheme: dark){
     svg{--bg:#15181c;--ink:#e8eaed;--ink2:#a2a9b2;--ink3:#6e757e;--rule:#30353b;
         --board:#0c0e10;--board-ink:#d8dce0;--module:#3a3f46;--module-ink:#e0e3e6;
-        --v33:#ef7466;--v5:#f0a243;--gnd:#b7bec6;--pot:#62aee0;--mood:#b98ae6;
+        --v33:#ef7466;--v5:#f0a243;--gnd:#b7bec6;
         --chaos:#e0b14f;--strip:#68ba84;--io:#6e757e}}
   .bg{fill:var(--bg)}
   text{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;fill:var(--ink)}
@@ -124,6 +124,22 @@ add(f'<rect class="bg" width="{W}" height="{H}"/>')
 text(30, 46, "StormCloud wiring · ESP32 DevKit V1 (30-pin)", "h1")
 text(30, 70, "Top view, USB at the bottom. Pin order matches the board silkscreen. Pins in colour are used; grey are free.", "h2")
 
+# ── keyboard: the settings come over USB, not from parts on the board ──
+KX, KY, KW = 60, 180, 440
+add(f'<rect class="card" x="{KX}" y="{KY}" width="{KW}" height="236" rx="8"/>')
+text(KX + 20, KY + 32, "CONTROLS", "ttl")
+text(KX + 124, KY + 32, "keyboard, over the USB cable", "note")
+keys = [("p  s  l", "pick palette, speed or level"),
+        ("+  -", "step it; wraps past either end"),
+        ("h", "hold: one segment lit, storm paused"),
+        ("0 – 6", "while holding, the segment to light")]
+for k, (key, what) in enumerate(keys):
+    y = KY + 70 + k * 30
+    text(KX + 20, y, key, "val")
+    text(KX + 110, y, what, "t")
+text(KX + 20, KY + 196, "Type into pio device monitor. Each change prints", "note")
+text(KX + 20, KY + 212, "a [keys] line, and the dashboard follows.", "note")
+
 # ── board ──────────────────────────────────────────────────────
 add(f'<rect class="board" x="{BX0}" y="{BY0}" width="{BX1-BX0}" height="{BY1-BY0}" rx="14"/>')
 for cx, cy in [(BX0+16, BY0+16), (BX1-16, BY0+16), (BX0+16, BY1-16), (BX1-16, BY1-16)]:
@@ -152,8 +168,8 @@ for bx, lab in [(712, "EN"), (888, "BOOT")]:
 add('<rect x="775" y="852" width="50" height="42" rx="4" fill="#b8bdc3" stroke="#7a8087"/>')
 text(800, 845, "micro-USB", "silk-s", "middle")
 
-TAGFILL = {"v33": "var(--v33)", "v5": "var(--v5)", "gnd": "var(--gnd)", "pot": "var(--pot)",
-           "mood": "var(--mood)", "chaos": "var(--chaos)", "strip": "var(--strip)"}
+TAGFILL = {"v33": "var(--v33)", "v5": "var(--v5)", "gnd": "var(--gnd)",
+           "chaos": "var(--chaos)", "strip": "var(--strip)"}
 
 def tag(x0, x1, y, label, kind):
     col = TAGFILL.get(kind)
@@ -178,29 +194,6 @@ for i, (silk, lab, kind) in enumerate(RIGHT):
     text(PR - 14, y + 4.5, silk, "silk", "end")
     tag(TAGR0, TAGR1, y, lab, kind)
 
-# ── pots ───────────────────────────────────────────────────────
-# Staircase routing: rightmost pot takes the highest pin, so no wires cross.
-WY = 205
-for px, name, pin in [(100, "SPEED", 6), (260, "PALETTE", 5), (420, "LEVEL", 3)]:
-    text(px, 104, name, "ttl", "middle")
-    flag(px, 132, "3V3")
-    line(px, 132, px, 168, "w")
-    add(f'<rect class="part" x="{px-10}" y="168" width="20" height="74" rx="2"/>')
-    text(px + 14, 164, "3", "note"); text(px + 14, 256, "1", "note")
-    line(px, 242, px, 268, "w"); gnd(px, 268)
-    # wiper
-    add(f'<path class="w" d="M{px+40},{WY} L{px+16},{WY}"/>')
-    add(f'<path d="M{px+11},{WY} l9,-5 v10 z" fill="var(--ink)"/>')
-    text(px + 22, WY - 8, "2", "note")
-    J, XV = px + 52, px + 100
-    line(px + 40, WY, XV, WY, "w"); dot(J, WY)
-    line(J, WY, J, 236, "w"); cap_v(J, 236, "100n", dx=14)
-    line(J, 244, J, 268, "w"); gnd(J, 268)
-    y = py(pin)
-    add(f'<path class="w" d="M{XV},{WY} L{XV},{y} L{TAGL0},{y}" style="stroke:var(--pot)"/>')
-    add(f'<path class="w" d="M{px+40},{WY} L{XV},{WY}" style="stroke:var(--pot)"/>')
-
-
 # ── chaos button ───────────────────────────────────────────────
 yc = py(9)
 CX = 520
@@ -215,55 +208,10 @@ text(CX - 36, yc + 28, "CHAOS", "ttl", "end")
 text(CX - 36, yc + 44, "momentary", "note", "end")
 text(CX - 36, yc + 58, "to GND, no resistor", "note", "end")
 
-# ── mood LED ───────────────────────────────────────────────────
-yr, yg, yb = py(7), py(8), py(12)
-ybl = 612                      # blue anode lead inside the LED box
-BOXX0, BOXX1 = 140, 286
-add(f'<rect class="box" x="{BOXX0}" y="470" width="{BOXX1-BOXX0}" height="168" rx="8"/>')
-BUS = 164
-for y, col, rlab, rsub in [(yr, "#d6453a", "220 Ω", None), (yg, "#2f9e55", "39–68 Ω", None)]:
-    add(f'<path class="w" d="M{TAGL0},{y} L{BOXX1},{y}" style="stroke:var(--mood)"/>')
-    res_h(470, y, rlab)
-add(f'<path class="w" d="M{TAGL0},{yb} L{330},{yb} L{330},{ybl} L{BOXX1},{ybl}" style="stroke:var(--mood)"/>')
-res_h(450, yb, "39–68 Ω")
-for y, col, lab in [(yr, "#d6453a", "R"), (yg, "#2f9e55", "G"), (ybl, "#2f6fd6", "B")]:
-    dx = 200
-    line(dx + 18, y, BOXX1, y, "w")
-    add(f'<path d="M{dx},{y} L{dx+18},{y-10} L{dx+18},{y+10} Z" fill="{col}" stroke="var(--ink)" stroke-width="1.5"/>')
-    line(dx, y - 10, dx, y + 10, "plate")
-    line(BUS, y, dx, y, "w")
-    text(dx + 26, y - 6, lab, "val")
-    dot(BUS, y)
-line(BUS, yr, BUS, 660, "w"); gnd(BUS, 660)
-text(BUS + 12, 676, "common cathode (K)", "note")
-text(BOXX0, 464, "MOOD LED", "ttl")
-text(BOXX0 + 96, 464, "RGB, common cathode", "note")
-
-# physical lead order inset
-IX, IY = 30, 722
-add(f'<rect class="card" x="{IX}" y="{IY}" width="292" height="178" rx="8"/>')
-text(IX + 14, IY + 22, "MOOD LED LEADS, flat side facing left", "note")
-LX = IX + 40
-B = IY + 98
-add(f'<path d="M{LX},{B} L{LX},{B-34} A34,34 0 0 1 {LX+68},{B-34} L{LX+68},{B} Z" fill="none" stroke="var(--ink)" stroke-width="2"/>')
-line(LX - 4, B, LX + 72, B, "plate")
-line(LX, B - 40, LX, B, "plate")  # flat side
-legs = [("R", "#d6453a", 38), ("K", "var(--ink)", 54), ("G", "#2f9e55", 42), ("B", "#2f6fd6", 40)]
-for k, (lab, col, ln) in enumerate(legs):
-    x = LX + 10 + k * 16
-    add(f'<line x1="{x}" y1="{B}" x2="{x}" y2="{B+ln}" stroke="{col}" stroke-width="3"/>')
-text(LX + 86, IY + 62, "R · K · G · B", "val")
-text(LX + 86, IY + 84, "K is the longest leg.", "note")
-text(LX + 86, IY + 100, "It goes to GND.", "note")
-text(LX + 86, IY + 124, "Not 220 Ω on all three:", "note")
-text(LX + 86, IY + 140, "that is a 5 V figure.", "note")
-for k, (lab, col, ln) in enumerate(legs):
-    text(LX + 10 + k * 16, B + ln + 14, lab, "note", "middle")
-
 # left GND and VIN
 yg_ = py(13)
 line(TAGL0, yg_, 548, yg_, "w"); line(548, yg_, 548, yg_ + 12, "w"); gnd(548, yg_ + 12)
-text(538, yg_ + 4, "pots, button, LED", "note", "end")
+text(538, yg_ + 4, "button", "note", "end")
 yv = py(14)
 add(f'<path class="v5" d="M{TAGL0},{yv} L{520},{yv}" style="fill:none"/>')
 add(f'<path d="M520,{yv} l-12,-7 v14 z" fill="var(--v5)"/>')
@@ -320,11 +268,6 @@ dot(1200, ygr)
 text(1044, 690, "common ground:", "val")
 text(1044, 704, "strip, supply and", "note")
 text(1044, 718, "ESP32 must share GND", "note")
-# 3V3 out
-y33 = py(14)
-add(f'<path class="v33" d="M{TAGR1},{y33} L1090,{y33}" style="fill:none"/>')
-add(f'<path d="M1090,{y33} l0,-7 l12,7 l-12,7 z" fill="var(--v33)"/>')
-text(1044, y33 + 22, "to leg 3 of each pot", "note")
 
 # why not D2
 text(1044, 576, "Not D2: it also drives", "note")
@@ -334,23 +277,20 @@ text(1044, 604, "which loads the data line.", "note")
 # ── legend ─────────────────────────────────────────────────────
 LY = 930
 add(f'<line x1="30" y1="{LY-20}" x2="{W-30}" y2="{LY-20}" stroke="var(--rule)" stroke-width="1"/>')
-items = [("var(--pot)", "Pots: palette D32, speed D33, level D34"),
-         ("var(--mood)", "Mood LED: R D25, G D26, B D13"),
-         ("var(--chaos)", "Chaos button: D27"),
+items = [("var(--chaos)", "Chaos button: D27"),
          ("var(--strip)", "Strip data: D18"),
-         ("var(--v33)", "3.3 V"), ("var(--v5)", "5 V"), ("var(--gnd)", "Ground")]
+         ("var(--v5)", "5 V"), ("var(--gnd)", "Ground")]
 x = 30
 for col, lab in items:
     add(f'<rect x="{x}" y="{LY-10}" width="22" height="14" rx="7" fill="{col}"/>')
     text(x + 30, LY + 2, lab, "t")
     x += 40 + len(lab) * 7.3
 add(f'<rect x="30" y="{LY+18}" width="22" height="14" rx="7" fill="var(--bg)" stroke="var(--io)" stroke-dasharray="4 3"/>')
-text(60, LY + 30, "Input only (GPIO34–39): no output, no internal pull-up. Fine for pots, wrong for the button.", "t")
+text(60, LY + 30, "Input only (GPIO34–39): no output, no internal pull-up. Wrong for the button.", "t")
 gnd(41, LY + 46)
 text(60, LY + 58, "Every ground symbol joins a GND pin. Both GND pins on the board are the same net.", "t")
 notes = [
-    "Pots are B10K linear. Leg 1 to GND, leg 3 to 3V3, middle leg 2 to the pin; swap 1 and 3 to reverse a knob. Solder the 100 nF at the ESP32 end of the wiper wire. 3.3 V only, never 5 V.",
-    "ADC2 pins (D2, D4, D12–D15, D25–D27) lose analog input when WiFi is on. That is why the pots sit on ADC1 (D32–D35); the outputs on ADC2 pins are unaffected.",
+    "No knobs: palette, speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.",
     "Strip data is 3.3 V into a 5 V strip. Short runs usually work. If the first pixel glitches, add a 74AHCT125 level shifter before the 330 Ω.",
     "EN resets the board. Hold BOOT while tapping EN to force the flasher, only if an upload will not start on its own.",
 ]

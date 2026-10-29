@@ -16,16 +16,14 @@ test('status line, quiet sky', () => {
   assert.equal(p.strike, null);
   assert.equal(p.fps, 99);
   assert.equal(p.mA, 240);
-  assert.equal(p.raw, null);
 });
 
-test('status line with a space in the palette, overlap, ends and raw', () => {
-  const p = parseLine('palette: red planet  speed: 10% (min)   level: 100% (max) | strike: Bolt_Centre +1   | fps:  96  mA: 5110 | raw:   12/2045/4095');
+test('status line with a space in the palette, overlap and ends', () => {
+  const p = parseLine('palette: red planet  speed: 10% (min)   level: 100% (max) | strike: Bolt_Centre +1   | fps:  96  mA: 5110');
   assert.equal(p.palette, 'red planet');
   assert.deepEqual(p.speed, { pct: 10, min: true, max: false });
   assert.deepEqual(p.level, { chaos: false, pct: 100, min: false, max: true });
   assert.deepEqual(p.strike, { name: 'Bolt_Centre', overlap: 1 });
-  assert.deepEqual(p.raw, [12, 2045, 4095]);
 });
 
 test('chaos, behind a time filter prefix', () => {
@@ -75,5 +73,7 @@ test('firmware source reads back the real tables', () => {
   assert.ok(fw.segments.length > 0);
   assert.ok(fw.segments.some(s => s.role === 'fork' && s.parent));
   assert.ok(fw.palettes.length > 0);
-  assert.equal(fw.detents.cutoffs.length, 9);
+  assert.equal(fw.steps.level, 10);
+  assert.equal(fw.steps.speed.length, 10);
+  assert.equal(fw.steps.speed[5], 1);          // step 6 is exactly 1.00x
 });

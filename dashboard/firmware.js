@@ -1,7 +1,8 @@
 /* Reads what the dashboard can't learn from the serial line out of the
    firmware source: the segment table (the board only prints it at boot, which
-   you usually miss), the palette colours, and the knob cutoffs. Each piece is
-   optional; a file that has moved or changed shape just leaves that piece out. */
+   you usually miss), the palette colours, and the speed and level steps. Each
+   piece is optional; a file that has moved or changed shape just leaves that
+   piece out. */
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -35,18 +36,19 @@ function bytes(src, name) {
   return body ? body[1].split(',').map(s => s.trim()).filter(Boolean).map(Number) : null;
 }
 
-// the ESP32 profile comes first in DetentProfiles.h, and that is the board in platformio.ini
-function detents(src) {
-  const cut = /DETENT_10_CUTOFFS\[\]\s*=\s*\{([^}]*)\}/.exec(src);
-  const hys = /DETENT_10\s*=\s*\{\s*\d+\s*,\s*DETENT_10_CUTOFFS\s*,\s*(\d+)\s*\}/.exec(src);
-  if (!cut) return null;
-  return { cutoffs: cut[1].split(',').map(Number), hysteresis: hys ? +hys[1] : 0, adcMax: 4095 };
+// the speed multiplier at each step (SPEED_Q8, 8.8 fixed point), and the level step count
+function steps(storm, controls) {
+  const level = /#define\s+LEVEL_STEPS\s+(\d+)/.exec(storm);
+  const q8 = bytes(controls, 'SPEED_Q8');
+  if (!level || !q8) return null;
+  return { level: +level[1], speed: q8.map(q => q / 256) };
 }
 
 export function readFirmware(root) {
   const layout = read(join(root, 'src/layout.h')) || '';
   const config = read(join(root, 'src/config.h')) || '';
-  const detent = read(join(root, 'lib/DetentSwitch/DetentProfiles.h')) || '';
+  const storm = read(join(root, 'src/storm.h')) || '';
+  const controls = read(join(root, 'src/controls.h')) || '';
   const leds = /#define\s+NUM_LEDS\s+(\d+)/.exec(layout);
   const x = bytes(layout, 'LED_X'), y = bytes(layout, 'LED_Y');
   const fw = {
@@ -55,7 +57,7 @@ export function readFirmware(root) {
     pixels: x && y && x.length === y.length ? x.map((v, i) => [v, y[i]]) : null,
     segments: segments(layout),
     palettes: palettes(config),
-    detents: detents(detent),
+    steps: steps(storm, controls),
   };
   for (const k of Object.keys(fw)) if (fw[k] == null) delete fw[k];
   return fw;

@@ -4,7 +4,7 @@
    Five of the seven files here are regenerated wholesale every time you
    export from the bench: layout.h, tuning.h, storm.h, strip.h and this
    one. config.h and controls.h are yours and are never overwritten —
-   pins, logging, palettes and the knobs live there.
+   pins, logging, palettes and the controls live there.
    ───────────────────────────────────────────────────────────── */
 #include "storm.h"
 #include "strip.h"
@@ -17,32 +17,27 @@ void setup() {
   while (!Serial && millis() - waited < 1500) { }   // but never hang without a host
 #endif
   stripBegin();
-  g_bright = scale8(MASTER, TRIM);      // until controlsBegin() reads the level knob
-  updatePalette();
+  controlsApply();                      // palette, speed and level at their defaults
   random16_set_seed(0x1337);            // same seed the bench previewed
   logBoot();
   controlsBegin();
   chaosBegin();
-  moodBegin();
-  consoleBegin();
 }
 
 void loop() {
-  consolePoll();
-  controlsUpdate(false);
+  controlsPoll();
 
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   if (g_hold) {
     renderHold();                  // storm paused: its clock does not advance
   } else {
-    uint32_t now = stormClock();   // virtual: the speed knob stretches this
+    uint32_t now = stormClock();   // virtual: the speed setting stretches this
     chaosPoll(millis(), now);      // button in real time, strikes in storm time
     renderAmbient(now);
     scheduleStrikes(now);
     for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
   }
-  moodUpdate(millis());
 
   uint32_t drawmW = stripShow(leds, frameBrightness());
   logDashboard(millis(), drawmW);  // wall-clock, not the speed-scaled storm clock

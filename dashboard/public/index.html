@@ -125,20 +125,6 @@ a:hover{text-decoration:underline}
 }
 .chips span.on{color:var(--ink);border-color:var(--volt-deep);background:var(--raise)}
 
-.raw{margin-top:12px}
-.raw .track{position:relative;height:14px;background:var(--stage);border:1px solid var(--line-soft);border-radius:3px}
-.raw .band{position:absolute;top:0;bottom:0;background:rgba(240,169,76,.12)}
-.raw .cut{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
-.raw .dot{
-  position:absolute;top:-3px;bottom:-3px;width:3px;margin-left:-1px;border-radius:1px;
-  background:var(--ink);transition:left .15s ease-out;
-}
-.raw.edge .dot{background:var(--armed)}
-.raw .read{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:10px;color:var(--faint)}
-.raw .read b{color:var(--dim);font-weight:500}
-.raw.edge .read .warn{color:var(--armed)}
-.raw.off .track{opacity:.4}
-
 /* ── sky ──────────────────────────────────────────────── */
 .skybox{position:relative;background:var(--stage);border:1px solid var(--line-soft);border-radius:4px;overflow:hidden}
 .skybox svg{display:block;width:100%;height:auto;max-height:420px}
@@ -306,21 +292,18 @@ a:hover{text-decoration:underline}
     <div class="big none" id="palVal">—</div>
     <div class="swatch"></div>
     <div class="chips" id="palChips"></div>
-    <div class="raw off" id="raw0"></div>
   </section>
 
   <section class="card knob" id="kSpeed">
     <h2>Speed <small>storm clock</small></h2>
     <div class="big none" id="spdVal">—</div>
     <div class="pips" id="spdPips"></div>
-    <div class="raw off" id="raw1"></div>
   </section>
 
   <section class="card knob" id="kLevel">
     <h2>Level <small>intensity</small></h2>
     <div class="big none" id="lvlVal">—</div>
     <div class="pips" id="lvlPips"></div>
-    <div class="raw off" id="raw2"></div>
   </section>
 
   <section class="card sky">
@@ -464,41 +447,6 @@ function pips(el, idx, steps = 10) {
   [...el.children].forEach((p, i) => { p.className = i === idx ? 'on' : i < idx ? 'past' : ''; });
 }
 
-function detentOf(raw) {
-  const d = S.firmware.detents;
-  if (!d) return null;
-  const idx = d.cutoffs.filter(c => raw >= c).length;
-  const near = d.cutoffs.find(c => Math.abs(raw - c) <= d.hysteresis);
-  return { idx, steps: d.cutoffs.length + 1, near };
-}
-
-function renderRaw(el, raw) {
-  const d = S.firmware.detents, max = d?.adcMax || 4095;
-  if (!el.dataset.built) {
-    let html = '<div class="track">';
-    for (const c of d?.cutoffs || []) {
-      html += `<span class="band" style="left:${(c - d.hysteresis) / max * 100}%;width:${2 * d.hysteresis / max * 100}%"></span>`;
-      html += `<span class="cut" style="left:${c / max * 100}%"></span>`;
-    }
-    html += '<span class="dot" style="left:0"></span></div><div class="read"><span class="l"></span><span class="warn"></span></div>';
-    el.innerHTML = html;
-    el.dataset.built = '1';
-  }
-  const dot = el.querySelector('.dot'), l = el.querySelector('.l'), w = el.querySelector('.warn');
-  if (raw == null) {
-    el.classList.add('off'); el.classList.remove('edge');
-    l.innerHTML = 'raw readings off · build with <b>STORM_LOG_RAW=1</b>';
-    w.textContent = '';
-    return;
-  }
-  el.classList.remove('off');
-  dot.style.left = `${raw / max * 100}%`;
-  const det = detentOf(raw);
-  l.innerHTML = `raw <b>${raw}</b>` + (det ? ` · detent <b>${det.idx + 1}</b>/${det.steps}` : '');
-  el.classList.toggle('edge', !!(det && det.near != null));
-  w.textContent = det && det.near != null ? `on the edge of ${det.near}` : '';
-}
-
 function knobText(k) { return `${k.pct}%`; }
 function knobTag(k)  { return k.min ? 'MIN' : k.max ? 'MAX' : ''; }
 
@@ -511,7 +459,6 @@ function renderKnobs() {
   if (!st) {
     for (const id of ['palVal', 'spdVal', 'lvlVal']) { $(id).textContent = '—'; $(id).classList.add('none'); }
     pips($('spdPips'), -1); pips($('lvlPips'), -1);
-    [0, 1, 2].forEach(i => renderRaw($('raw' + i), null));
     return;
   }
 
@@ -534,8 +481,6 @@ function renderKnobs() {
   if (lv.innerHTML !== lHtml) { lv.innerHTML = lHtml; bump(lv); }
   $('kLevel').classList.toggle('chaos', st.level.chaos);
   pips($('lvlPips'), st.level.chaos ? 9 : Math.round(st.level.pct / 10) - 1);
-
-  (st.raw || [null, null, null]).forEach((r, i) => renderRaw($('raw' + i), r));
 }
 
 /* ── sky ───────────────────────────────────────────────────── */
@@ -753,15 +698,13 @@ function renderCharts() {
 }
 
 /* ── meters ────────────────────────────────────────────────────
-   Four dual-scale meters. The knob meters read the wiper voltage on the
-   bottom scale (raw ADC × 3.3 V / 4095, so approximate: the ESP32's ADC is
-   not linear near its ends) and the detent it falls in on the top scale,
-   with the cutoffs as ticks and the hysteresis as amber bands. The draw meter
+   Four dual-scale meters. The three settings are stepped from the keyboard,
+   so their meters read the step: numbered on the top scale, with what it
+   means below (the speed multiplier, the level percentage). The draw meter
    reads amps on top and watts at 5 V below. The needle is a CSS transform
    with a transition, so each new reading swings in from wherever it is. */
 const SWEEP = 42;                       // degrees either side of upright
 const PIVOT = [120, 175];               // below the face, as on a real movement
-const VREF = 3.3, ADC_MAX = 4095;
 
 const fx = n => n.toFixed(2);
 const pt = (r, f) => {
@@ -828,26 +771,26 @@ function faceSVG(id, unit, top, bottom) {
 </svg>`;
 }
 
-function knobFace(id) {
-  const d = S.firmware.detents;
-  const top = { major: [], bands: [] };
-  if (d) {
-    const edges = [0, ...d.cutoffs, d.adcMax];
-    d.cutoffs.forEach(c => {
-      top.major.push({ f: c / d.adcMax });
-      top.bands.push([(c - d.hysteresis) / d.adcMax, (c + d.hysteresis) / d.adcMax, 'rgba(196,118,18,.6)']);
-    });
-    // detent numbers sit where the knob rests: the middle of each band
-    for (let i = 0; i < edges.length - 1; i++) top.major.push({ f: (edges[i] + edges[i + 1]) / 2 / d.adcMax, text: i + 1, tick: false });
-  }
-  const bottom = { major: [], minor: [], bands: [[3.1 / VREF, 1, '#b8322a']] };   // the ADC flattens out up there
-  for (let v = 0; v <= VREF + 1e-9; v += 0.1) {
-    const f = v / VREF, r = Math.round(v * 10);
-    if (r % 5 === 0) bottom.major.push({ f, text: num(v) });
+/* Steps of a setting, 0..n-1, as the read of the status line gives them. */
+const stepFrac = (i, n) => n > 1 ? i / (n - 1) : 0;
+function stepFace(id, unit, n, bottomLabels) {
+  const top = { major: [] }, bottom = { major: [], minor: [] };
+  for (let i = 0; i < n; i++) {
+    const f = stepFrac(i, n);
+    top.major.push({ f, text: i + 1 });
+    if (bottomLabels[i] != null) bottom.major.push({ f, text: bottomLabels[i] });
     else bottom.minor.push(f);
   }
-  return faceSVG(id, 'V', top, bottom);
+  return faceSVG(id, unit, top, bottom);
 }
+
+const paletteSteps = () => (S.firmware.palettes || []).length || 1;
+const speedTable   = () => S.firmware.steps?.speed || [];
+const levelSteps   = () => S.firmware.steps?.level || 10;
+const speedSteps   = () => speedTable().length || 10;
+
+// the status line reports a step as (step + 1) × 100 / steps, rounded down
+const stepOfPct = (pct, n) => Math.max(0, Math.min(n - 1, Math.ceil(pct * n / 100) - 1));
 
 let ampMax = 10;
 function ampFace(id) {
@@ -868,17 +811,26 @@ function ampFace(id) {
 }
 
 const METERS = [
-  { id: 'mtr0', name: 'Palette', unit: 'V', face: knobFace, read: st => st.raw && st.raw[0] },
-  { id: 'mtr1', name: 'Speed',   unit: 'V', face: knobFace, read: st => st.raw && st.raw[1] },
-  { id: 'mtr2', name: 'Level',   unit: 'V', face: knobFace, read: st => st.raw && st.raw[2] },
-  { id: 'mtr3', name: 'Draw',    unit: 'A', face: ampFace,  read: st => st.mA },
+  { id: 'mtr0', name: 'Palette', unit: '#',
+    face: id => stepFace(id, '#', paletteSteps(), []),
+    read: st => { const i = (S.firmware.palettes || []).findIndex(p => p.name === st.palette); return i < 0 ? null : i; },
+    frac: i => stepFrac(i, paletteSteps()),
+    digits: i => String(i + 1) },
+  { id: 'mtr1', name: 'Speed', unit: '×',
+    face: id => stepFace(id, '×', speedSteps(), speedTable().map((m, i) => m === 1 || i === 0 || i === speedSteps() - 1 ? num(m) : null)),
+    read: st => stepOfPct(st.speed.pct, speedSteps()),
+    frac: i => stepFrac(i, speedSteps()),
+    digits: i => speedTable()[i] != null ? speedTable()[i].toFixed(2) : String(i + 1) },
+  { id: 'mtr2', name: 'Level', unit: '%',
+    face: id => stepFace(id, '%', levelSteps(), Array.from({ length: levelSteps() }, (_, i) =>
+      i === 0 || i === levelSteps() - 1 ? Math.floor((i + 1) * 100 / levelSteps()) : null)),
+    read: st => st.level.chaos ? levelSteps() - 1 : stepOfPct(st.level.pct, levelSteps()),
+    frac: i => stepFrac(i, levelSteps()),
+    digits: i => String(Math.floor((i + 1) * 100 / levelSteps())) },
+  { id: 'mtr3', name: 'Draw', unit: 'A', face: ampFace, read: st => st.mA,
+    frac: v => v / 1000 / ampMax,
+    digits: v => { const a = v / 1000; return a < 10 ? a.toFixed(2) : a < 100 ? a.toFixed(1) : String(Math.min(999, Math.round(a))); } },
 ];
-const fracOf  = (m, v) => m.unit === 'A' ? v / 1000 / ampMax : v / ADC_MAX;
-const digitsOf = (m, v) => {
-  if (m.unit === 'V') return (v / ADC_MAX * VREF).toFixed(2);
-  const a = v / 1000;
-  return a < 10 ? a.toFixed(2) : a < 100 ? a.toFixed(1) : String(Math.min(999, Math.round(a)));
-};
 
 function nixieHTML(n) {
   return '<span class="tube"><b class="ghost">8</b><b class="d"></b><i class="dp"></i></span>'.repeat(n);
@@ -896,7 +848,7 @@ function setNixies(el, str) {
 
 let metersKey = '';
 function buildMeters() {
-  const key = JSON.stringify([S.firmware.detents, $('supply').value]);
+  const key = JSON.stringify([S.firmware.palettes, S.firmware.steps, $('supply').value]);
   if (key === metersKey) return;
   metersKey = key;
   $('meters').innerHTML = METERS.map(m => `
@@ -916,7 +868,7 @@ function renderNeedles() {
     const on = v != null && live();
     el.classList.toggle('off', !on);
     // with nothing to show the needle rests just past zero, on its stop
-    const f = on ? Math.max(-0.03, Math.min(1.03, fracOf(m, v))) : -0.07;
+    const f = on ? Math.max(-0.03, Math.min(1.03, m.frac(v))) : -0.07;
     el.querySelector('.needle').style.transform = `rotate(${(-SWEEP + 2 * SWEEP * f).toFixed(2)}deg)`;
   }
 }
@@ -928,7 +880,7 @@ function renderNixies() {
     const el = $(m.id)?.querySelector('.nixies');
     if (!el) continue;
     const v = st ? m.read(st) : null;
-    setNixies(el, v != null && live() ? digitsOf(m, v) : '');
+    setNixies(el, v != null && live() ? m.digits(v) : '');
   }
 }
 setInterval(() => S && renderNixies(), 500);
@@ -938,7 +890,7 @@ const logEl = $('log');
 function logRow(entry) {
   const d = document.createElement('div');
   d.className = entry.type === 'status' ? 'status' : entry.type === 'dropped' ? 'dropped'
-              : /^\[(storm|pots|mood)\]/.test(entry.line) || entry.type === 'boot' ? 'boot' : '';
+              : /^\[(storm|keys|hold)\]/.test(entry.line) || entry.type === 'boot' ? 'boot' : '';
   const time = document.createElement('time');
   time.textContent = clock(entry.t);
   d.append(time, entry.line);
