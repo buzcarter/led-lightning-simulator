@@ -3,12 +3,14 @@
    same way. The formats are the LOG() calls in src/storm.h and src/controls.h;
    change one there and change it here. Anything unrecognised is { type: 'text' }. */
 
-// palette: tornado     speed: 60%         level: 40%        | strike: Bolt_Left +1     | fps:  98  mA: 3180
+// palette: tornado     speed: 60%         cloud: 40%         level: 40%        | strike: Bolt_Left +1     | fps:  98  mA: 3180
+// cloud is optional, so lines from firmware without the cloud speed still read
 const STATUS = new RegExp(
-  'palette:\\s+(.+?)\\s+speed:\\s+(\\d+)%(?:\\s+\\((min|max)\\))?' +
-  '\\s+level:\\s+(?:(CHAOS)|(\\d+)%(?:\\s+\\((min|max)\\))?)' +
-  '\\s*\\|\\s*strike:\\s+(\\S+)(?:\\s+\\+(\\d+))?' +
-  '\\s*\\|\\s*fps:\\s*(\\d+)\\s+mA:\\s*(\\d+)'
+  'palette:\\s+(?<palette>.+?)\\s+speed:\\s+(?<speed>\\d+)%(?:\\s+\\((?<speedEnd>min|max)\\))?' +
+  '(?:\\s+cloud:\\s+(?<cloud>\\d+)%(?:\\s+\\((?<cloudEnd>min|max)\\))?)?' +
+  '\\s+level:\\s+(?:(?<chaos>CHAOS)|(?<level>\\d+)%(?:\\s+\\((?<levelEnd>min|max)\\))?)' +
+  '\\s*\\|\\s*strike:\\s+(?<strike>\\S+)(?:\\s+\\+(?<overlap>\\d+))?' +
+  '\\s*\\|\\s*fps:\\s*(?<fps>\\d+)\\s+mA:\\s*(?<mA>\\d+)'
 );
 const BOOT    = /StormCloud ready\D+(\d+) px, (\d+) segments, pin (\d+), master (\d+)/;
 const SEGMENT = /^\[storm\]\s+(\S+)\s+(\d+)\s+(\d+)\s+(cloud|bolt|fork)\s+(.*)$/;
@@ -24,14 +26,16 @@ export function parseLine(raw) {
   let m;
 
   if ((m = STATUS.exec(line))) {
+    const g = m.groups;
     return {
       type: 'status',
-      palette: m[1].trim(),
-      speed: knob(m[2], m[3]),
-      level: m[4] ? { chaos: true, pct: 100, min: false, max: false } : { chaos: false, ...knob(m[5], m[6]) },
-      strike: m[7] === '_' ? null : { name: m[7], overlap: m[8] ? +m[8] : 0 },
-      fps: +m[9],
-      mA: +m[10],
+      palette: g.palette.trim(),
+      speed: knob(g.speed, g.speedEnd),
+      cloud: g.cloud != null ? knob(g.cloud, g.cloudEnd) : null,
+      level: g.chaos ? { chaos: true, pct: 100, min: false, max: false } : { chaos: false, ...knob(g.level, g.levelEnd) },
+      strike: g.strike === '_' ? null : { name: g.strike, overlap: g.overlap ? +g.overlap : 0 },
+      fps: +g.fps,
+      mA: +g.mA,
     };
   }
   if ((m = BOOT.exec(line)))    return { type: 'boot', px: +m[1], segments: +m[2], pin: +m[3], master: +m[4] };

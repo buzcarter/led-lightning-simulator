@@ -26,7 +26,7 @@ export function fakeBench(fw, emit) {
   const pals = (fw.palettes || [{ name: 'storm' }]).map(p => p.name);
   const roots = segs.filter(s => s.role === 'bolt').map(s => s.name);
 
-  const k = { palette: 1, speed: 5, level: 3 };
+  const k = { palette: 1, speed: 5, cloud: 5, level: 3 };
   let strikes = [];           // { name, until }
   let chaosUntil = 0;
   let last = '', lastAt = 0;
@@ -41,7 +41,7 @@ export function fakeBench(fw, emit) {
   }
   emit('[storm] palette hue=80/64 sat=165/30 -> cool #3D5A0F hot #E6F0C8');
   emit('[storm] frame buffer 900 B, strike pool 96 B, segment table 196 B');
-  emit('[keys]  p s l pick palette, speed or level; + - step it; h hold, then 0-6');
+  emit('[keys]  p s c l pick palette, speed, cloud or level; + - step it; h hold, then 0-6');
   emit('[storm] chaos button GPIO27 to GND');
   emit('');
 
@@ -61,7 +61,7 @@ export function fakeBench(fw, emit) {
     }
     // someone at the keyboard, now and then
     if (Math.random() < 0.004) {
-      const which = pick(['palette', 'speed', 'level']);
+      const which = pick(['palette', 'speed', 'cloud', 'level']);
       const n = which === 'palette' ? pals.length : STEPS;
       k[which] = (k[which] + (Math.random() < 0.5 ? n - 1 : 1)) % n;
       emit(`[keys]  ${which} ${k[which] + 1}/${n}`);
@@ -73,7 +73,7 @@ export function fakeBench(fw, emit) {
 
     const newest = strikes[strikes.length - 1];
     const chan = newest ? newest.name + (strikes.length > 1 ? ` +${strikes.length - 1}` : '') : '_';
-    const line = `palette: ${pad(pals[k.palette], 10)}  speed: ${pad(knob(k.speed), 10)}  ` +
+    const line = `palette: ${pad(pals[k.palette], 10)}  speed: ${pad(knob(k.speed), 10)}  cloud: ${pad(knob(k.cloud), 10)}  ` +
                  `level: ${pad(chaos ? 'CHAOS' : knob(k.level), 10)} | strike: ${pad(chan, 16)}`;
 
     if ((line !== last && now - lastAt >= 120) || now - lastAt >= 750) {

@@ -2,8 +2,8 @@
    controls.h — YOURS. Bolt Bench never overwrites this file.
 
    Two inputs: the chaos button on the board, and keys typed into the
-   serial monitor on a tethered computer. Palette, speed and level are set
-   from the keyboard; there are no knobs.
+   serial monitor on a tethered computer. Palette, speed, cloud speed and
+   level are set from the keyboard; there are no knobs.
    ───────────────────────────────────────────────────────────── */
 #pragma once
 #include <Arduino.h>
@@ -13,7 +13,8 @@
 /* Speed steps, 8.8 fixed point, one per step. Geometric, because equal
    presses should give equal ratio changes; step 6 is exactly 1.00x.
    SPEED_STEPS lives in storm.h, beside LEVEL_STEPS, so the dashboard can
-   see it. 0.25x at step 1, 3.03x at step 10. */
+   see it. 0.25x at step 1, 3.03x at step 10. The cloud speed uses the same
+   table. */
 static const uint16_t SPEED_Q8[SPEED_STEPS] = {
    64,   84,  111,  147,  194,  256,  338,  446,  588,  776
 };
@@ -23,7 +24,7 @@ static const uint16_t SPEED_Q8[SPEED_STEPS] = {
    Set to 0 to turn it into an off switch. */
 #define LEVEL_FLOOR  20
 
-/* Recomputes everything that follows from g_palette, g_speed and g_level. */
+/* Recomputes everything that follows from g_palette, g_speed, g_cloud and g_level. */
 void controlsApply() {
   /* Palette, not raw hue. Rotating hue alone leaves SAT wherever tuning.h
      left it — and at a low saturation every hue is the same near-white.
@@ -33,6 +34,7 @@ void controlsApply() {
   updatePalette();
 
   g_speedQ8 = SPEED_Q8[g_speed];
+  g_cloudQ8 = SPEED_Q8[g_cloud];
 
   /* Level spans LEVEL_FLOOR up to the palette's ceiling, MASTER x TRIM. */
   uint8_t ceil8 = scale8(MASTER, g_trim);
@@ -132,7 +134,7 @@ inline void chaosPoll(uint32_t, uint32_t) {}
 /* ── keyboard ───────────────────────────────────────────────── */
 /* Keys typed into the serial monitor (pio device monitor passes them through).
 
-     p s l   pick palette, speed or level
+     p s c l pick palette, speed (the bolts), cloud speed or level
      + -     step it up or down; past either end it wraps to the other
              (= and _ work too, so shift is optional)
      h       hold mode on/off: one segment lit steady, the storm paused
@@ -143,16 +145,22 @@ inline void chaosPoll(uint32_t, uint32_t) {}
    stay at their boot values. */
 #if STORM_LOG
 
-enum Setting : uint8_t { SET_NONE, SET_PALETTE, SET_SPEED, SET_LEVEL };
+enum Setting : uint8_t { SET_NONE, SET_PALETTE, SET_SPEED, SET_CLOUD, SET_LEVEL };
 static Setting keySetting = SET_NONE;
 
 static const char *settingName(Setting s) {
-  return s == SET_PALETTE ? "palette" : s == SET_SPEED ? "speed" : "level";
+  return s == SET_PALETTE ? "palette" : s == SET_SPEED ? "speed"
+       : s == SET_CLOUD ? "cloud" : "level";
 }
 
 /* One step up (dir +1) or down (-1) through n values, wrapping at both ends. */
 static inline uint8_t stepWrap(uint8_t v, int8_t dir, uint8_t n) {
   return dir > 0 ? (v + 1 < n ? v + 1 : 0) : (v > 0 ? v - 1 : n - 1);
+}
+
+static void logSpeed(const char *name, uint8_t step, uint16_t q8) {
+  LOG("[keys]  %s %u/%u %u.%02ux\n", name, (unsigned)(step + 1), (unsigned)SPEED_STEPS,
+      (unsigned)(q8 >> 8), (unsigned)((q8 & 0xFF) * 100 / 256));
 }
 
 static void logSetting(Setting s) {
@@ -161,10 +169,8 @@ static void logSetting(Setting s) {
       LOG("[keys]  palette %u/%u %s\n", (unsigned)(g_palette + 1), (unsigned)NUM_PALETTES,
           PALETTES[g_palette].name);
       break;
-    case SET_SPEED:
-      LOG("[keys]  speed %u/%u %u.%02ux\n", (unsigned)(g_speed + 1), (unsigned)SPEED_STEPS,
-          (unsigned)(g_speedQ8 >> 8), (unsigned)((g_speedQ8 & 0xFF) * 100 / 256));
-      break;
+    case SET_SPEED: logSpeed("speed", g_speed, g_speedQ8); break;
+    case SET_CLOUD: logSpeed("cloud", g_cloud, g_cloudQ8); break;
     case SET_LEVEL:
       LOG("[keys]  level %u/%u\n", (unsigned)(g_level + 1), (unsigned)LEVEL_STEPS);
       break;
@@ -176,15 +182,16 @@ static void keyStep(int8_t dir) {
   switch (keySetting) {
     case SET_PALETTE: g_palette = stepWrap(g_palette, dir, NUM_PALETTES); break;
     case SET_SPEED:   g_speed   = stepWrap(g_speed,   dir, SPEED_STEPS);  break;
+    case SET_CLOUD:   g_cloud   = stepWrap(g_cloud,   dir, SPEED_STEPS);  break;
     case SET_LEVEL:   g_level   = stepWrap(g_level,   dir, LEVEL_STEPS);  break;
-    default: LOG("[keys]  pick p, s or l first\n"); return;
+    default: LOG("[keys]  pick p, s, c or l first\n"); return;
   }
   controlsApply();
   logSetting(keySetting);
 }
 
 void controlsBegin() {
-  LOG("[keys]  p s l pick palette, speed or level; + - step it; h hold, then 0-%u\n",
+  LOG("[keys]  p s c l pick palette, speed, cloud or level; + - step it; h hold, then 0-%u\n",
       (unsigned)(NUM_SEGMENTS - 1));
 }
 
@@ -194,6 +201,7 @@ void controlsPoll() {
     switch (c) {
       case 'p': keySetting = SET_PALETTE; break;
       case 's': keySetting = SET_SPEED;   break;
+      case 'c': keySetting = SET_CLOUD;   break;
       case 'l': keySetting = SET_LEVEL;   break;
       case '+': case '=': keyStep(+1); continue;
       case '-': case '_': keyStep(-1); continue;

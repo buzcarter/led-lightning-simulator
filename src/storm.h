@@ -40,6 +40,8 @@ uint8_t  g_dblChance = DBL_CHANCE;
 uint8_t  g_chaos     = 0;              // 0..255, position in the chaos envelope
 uint16_t g_speedQ8 = 256;              // 8.8 fixed point; 256 = 1.00x
 uint8_t  g_speed   = SPEED_STEPS / 2;  // 0..SPEED_STEPS-1, the speed step; 5 is 1.00x
+uint16_t g_cloudQ8 = 256;              // the cloud's ambient shimmer, on its own clock
+uint8_t  g_cloud   = SPEED_STEPS / 2;  // 0..SPEED_STEPS-1, the cloud speed step
 
 void updatePalette() {
   hsv2rgb_rainbow(CHSV(g_hue, g_sat,     255), coolC);
@@ -55,20 +57,33 @@ uint8_t frameBrightness() {
   return g_bright + scale8(head, g_chaos);
 }
 
-/* ── clock ──────────────────────────────────────────────────── */
-/* A virtual clock, not scaled millis(). Scaling millis() directly would
-   teleport every strike in flight the instant the speed changed; this
-   accumulates instead, so a speed change is smooth. It is the same thing
-   the bench does with simTime += dt * speed. */
-uint32_t stormClock() {
-  static uint32_t vClock = 0, lastReal = 0;
+/* ── clocks ─────────────────────────────────────────────────── */
+/* Virtual clocks, not scaled millis(). Scaling millis() directly would
+   teleport every strike in flight the instant the speed changed; these
+   accumulate instead, so a speed change is smooth. It is the same thing
+   the bench does with simTime += dt * speed.
+
+   Two of them: the storm clock runs the strikes (and the cloud's flash in
+   sympathy, which belongs to the strike), the cloud clock runs only the
+   cloud's ambient shimmer. At equal speeds they read the same, which is
+   what the bench previews. */
+struct VirtualClock {
+  uint64_t q8 = 0;                     // elapsed ms in 8.8, so slow speeds keep their fractions
+  uint32_t lastReal = 0;
+};
+
+static uint32_t tick(VirtualClock &c, uint16_t speedQ8) {
   uint32_t real = millis();
-  uint32_t dt = real - lastReal;
-  lastReal = real;
+  uint32_t dt = real - c.lastReal;
+  c.lastReal = real;
   if (dt > 100) dt = 100;              // never fast-forward through a stall
-  vClock += ((uint32_t)dt * g_speedQ8) >> 8;
-  return vClock;
+  c.q8 += (uint64_t)dt * speedQ8;
+  return (uint32_t)(c.q8 >> 8);
 }
+
+VirtualClock stormVClock, cloudVClock;
+uint32_t stormClock() { return tick(stormVClock, g_speedQ8); }
+uint32_t cloudClock() { return tick(cloudVClock, g_cloudQ8); }
 
 /* ── helpers ────────────────────────────────────────────────── */
 static inline uint8_t mix8(uint8_t a, uint8_t b, uint8_t amt) {
@@ -314,7 +329,7 @@ static void stepPercent(char *buf, size_t n, uint8_t idx, uint8_t steps) {
 /* drawmW is what the strip drew for the frame just sent, from stripShow(). */
 void logDashboard(uint32_t realNow, uint32_t drawmW) {
 #if STORM_LOG
-  static char     lastLine[128] = "";
+  static char     lastLine[160] = "";
   static uint32_t lastAt = 0, frames = 0, peakmW = 0, fpsAt = 0, fps = 0;
 
   frames++;
@@ -340,15 +355,16 @@ void logDashboard(uint32_t realNow, uint32_t drawmW) {
     else             snprintf(chan, sizeof chan, "%s", sg.name);
   }
 
-  char spd[12], lvl[12];
+  char spd[12], cld[12], lvl[12];
   stepPercent(spd, sizeof spd, g_speed, SPEED_STEPS);
+  stepPercent(cld, sizeof cld, g_cloud, SPEED_STEPS);
   if (g_chaos) snprintf(lvl, sizeof lvl, "CHAOS");
   else         stepPercent(lvl, sizeof lvl, g_level, LEVEL_STEPS);
 
-  char line[128];
+  char line[160];
   snprintf(line, sizeof line,
-           "palette: %-10s  speed: %-10s  level: %-10s | strike: %-16s",
-           PALETTES[g_palette].name, spd, lvl, chan);
+           "palette: %-10s  speed: %-10s  cloud: %-10s  level: %-10s | strike: %-16s",
+           PALETTES[g_palette].name, spd, cld, lvl, chan);
 
   bool changed = strcmp(line, lastLine) != 0;
   bool due     = (realNow - lastAt) >= STORM_LOG_STATS;

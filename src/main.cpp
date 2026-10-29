@@ -34,7 +34,7 @@ void loop() {
   } else {
     uint32_t now = stormClock();   // virtual: the speed setting stretches this
     chaosPoll(millis(), now);      // button in real time, strikes in storm time
-    renderAmbient(now);
+    renderAmbient(cloudClock());   // the cloud's shimmer, on its own speed
     scheduleStrikes(now);
     for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
   }

@@ -198,10 +198,10 @@ Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the def
 Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every key press.
 
 ```
-palette: tornado     speed: 60%         level: 40%        | strike: Bolt_Left        | fps:  98  mA: 3180
-palette: tornado     speed: 60%         level: 40%        | strike: Bolt_Centre      | fps:  97  mA: 4020
-palette: tornado     speed: 60%         level: 40%        | strike: _                | fps:  99  mA:  240
-palette: voldemort   speed: 70%         level: 80%        | strike: Bolt_Centre +1   | fps:  96  mA: 5110
+palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: Bolt_Left        | fps:  98  mA: 3180
+palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: Bolt_Centre      | fps:  97  mA: 4020
+palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: _                | fps:  99  mA:  240
+palette: voldemort   speed: 70%         cloud: 50%         level: 80%        | strike: Bolt_Centre +1   | fps:  96  mA: 5110
 ```
 
 `strike` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`.
@@ -225,9 +225,9 @@ pio device monitor            # in another terminal, as usual
 
 The filter is switched on in `platformio.ini` (`monitor_filters = default, dashboard`). It sends UDP so the monitor never waits on the dashboard, and never notices whether it is running: with nothing listening, the packets are simply dropped. The service has no dependencies, so there is no `npm install`, and it needs Node 18 or later.
 
-Across the top is a meter rack: one backlit, dual-scale meter per setting and one for the draw, each with a nixie readout. A setting's meter reads its step, numbered on the upper scale, with what the step means below: the speed multiplier, the level percentage. The draw meter shows amps above and watts at 5 V below, with a red zone from the supply limit you type in. The needles swing to each new reading with a CSS transition. The digits update at most twice a second. The build asks for a status line at least every 750 ms (`STORM_LOG_STATS=750`), so the meters keep moving even when nothing changes. The pilot lamp is red while lines are arriving and amber when the board goes quiet.
+Across the top is a meter rack: one backlit, dual-scale meter per setting (palette, speed, cloud, level) and one for the draw, each with a nixie readout. A setting's meter reads its step, numbered on the upper scale, with what the step means below: the speed multipliers, the level percentage. The draw meter shows amps above and watts at 5 V below, with a red zone from the supply limit you type in. The needles swing to each new reading with a CSS transition. The digits update at most twice a second. The build asks for a status line at least every 750 ms (`STORM_LOG_STATS=750`), so the meters keep moving even when nothing changes. The pilot lamp is red while lines are arriving and amber when the board goes quiet.
 
-Below the rack, the page shows the three settings. It draws the cloud from the pixel coordinates in `layout.h` and lights each strike's tree in the current palette's colours. It also counts strikes per root channel, charts frame rate and peak draw over the last five minutes against a supply limit you type in, and keeps a tail of the raw serial. The segment table comes from `src/layout.h` until the board's boot banner provides its own.
+Below the rack, the page shows the four settings. It draws the cloud from the pixel coordinates in `layout.h` and lights each strike's tree in the current palette's colours. It also counts strikes per root channel, charts frame rate and peak draw over the last five minutes against a supply limit you type in, and keeps a tail of the raw serial. The segment table comes from `src/layout.h` until the board's boot banner provides its own.
 
 The page reads the stream with Server-Sent Events rather than a WebSocket: data only flows one way, and `EventSource` reconnects by itself. Ports are `STORM_DASH_UDP` (7777) and `STORM_DASH_HTTP` (7778). The page is served on localhost only unless `STORM_DASH_BIND=0.0.0.0`. The service also serves the bench at `/simulator`.
 
@@ -259,22 +259,24 @@ The strip is on `GPIO18` (`LED_PIN`), WS2812B with `GRB` order (`LED_TYPE`), in 
 
 ## Controls
 
-There are no knobs. Palette, speed and level are set from the keyboard of the computer the board is tethered to, typed into `pio device monitor` (which passes keys through to the board over the same USB cable). The chaos button is the only input on the board itself. The whole build (board pinout, chaos button and strip) is on the [wiring diagram](docs/wiring-esp32.svg).
+There are no knobs. Palette, speed, cloud speed and level are set from the keyboard of the computer the board is tethered to, typed into `pio device monitor` (which passes keys through to the board over the same USB cable). The chaos button is the only input on the board itself. The whole build (board pinout, chaos button and strip) is on the [wiring diagram](docs/wiring-esp32.svg).
 
 | Key | Does |
 |---|---|
-| `p` `s` `l` | pick palette, speed or level |
+| `p` `s` `c` `l` | pick palette, speed, cloud speed or level |
 | `+` `-` | step it up or down; past either end it wraps to the other (`=` and `_` work too, so shift is optional) |
 | `h` | hold mode on/off: one segment lit steady, the storm paused |
 | `0`–`6` | while holding, the segment to light, in the order the boot banner lists them (0 is the cloud body) |
 
-Each change prints a `[keys]` line with the new value, and the dashboard line follows. The keys need `STORM_LOG 1`, which is what opens the serial port; without it the settings stay at their boot values (palette 1, speed 1.00×, level 100%).
+Each change prints a `[keys]` line with the new value, and the dashboard line follows. The keys need `STORM_LOG 1`, which is what opens the serial port; without it the settings stay at their boot values (palette 1, both speeds 1.00×, level 100%).
 
 **Palette carries a whole look per step, not a hue.** Rotating hue alone leaves `SAT` wherever the export left it, and at low saturation every hue is the same near-white. Each step sets hue, saturation, peak saturation and trim together from `PALETTES[]` in `config.h`; there are as many steps as rows there.
 
 **Speed is geometric**, 0.25× to 3.03× across 10 steps, with step 6 at exactly 1.00× (`SPEED_Q8` in `controls.h`). Equal presses give equal ratio changes.
 
-It drives a **virtual clock, not scaled `millis()`**. Scaling `millis()` directly would teleport every strike in flight the instant the speed changed. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`.
+It drives a **virtual clock, not scaled `millis()`**. Scaling `millis()` directly would teleport every strike in flight the instant the speed changed. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`. It keeps the fraction of a millisecond each frame, so 0.25× really is 0.25× at 100 fps.
+
+**Cloud speed** runs the cloud's ambient shimmer on a clock of its own (`cloudClock()`), from the same 0.25×–3.03× table. Speed runs the bolts, and with them the cloud's flash in sympathy with each strike, which belongs to the strike. At equal speeds the two clocks read the same, which is what the bench previews; the bench itself has only the one speed.
 
 **Level** has 10 steps, 0 to 100% in ninths. Step 1 is `LEVEL_FLOOR`, not off.
 

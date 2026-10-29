@@ -89,12 +89,13 @@ a:hover{text-decoration:underline}
   text-transform:uppercase;letter-spacing:.11em;
 }
 .card h2 small{margin-left:auto;text-transform:none;letter-spacing:.02em;font-size:10px}
-.knob{grid-column:span 4}
+.knob{grid-column:span 3}
 .sky{grid-column:span 8}
 .channels{grid-column:span 4}
 .chart{grid-column:span 6}
 .console{grid-column:span 12}
 @media (max-width:1000px){.sky,.channels,.chart{grid-column:span 12}}
+@media (max-width:1100px){.knob{grid-column:span 6}}
 @media (max-width:760px){.knob{grid-column:span 12}.main{padding:12px 16px}.rail{position:static}}
 
 /* ── knobs ────────────────────────────────────────────── */
@@ -213,8 +214,9 @@ a:hover{text-decoration:underline}
 }
 .pilot[data-s=live] i{background:radial-gradient(circle at 35% 30%,#ffd2c0,#ff3b1f 45%,#a8160a);box-shadow:0 0 6px 2px rgba(255,60,30,.75),0 0 16px 4px rgba(255,60,30,.35)}
 .pilot[data-s=quiet] i,.pilot[data-s=waiting] i{background:radial-gradient(circle at 35% 30%,#ffe7b8,#f0a13a 45%,#94560c);box-shadow:0 0 6px 2px rgba(240,161,58,.6)}
-.meters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px 26px}
-@media (max-width:1100px){.meters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.meters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:22px 26px}
+@media (max-width:1300px){.meters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:860px){.meters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.meters{grid-template-columns:minmax(0,1fr)}.rack{padding:30px 20px 24px}}
 .meter{display:flex;flex-direction:column;align-items:center;min-width:0}
 .meter svg{display:block;width:100%;height:auto;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
@@ -298,6 +300,12 @@ a:hover{text-decoration:underline}
     <h2>Speed <small>storm clock</small></h2>
     <div class="big none" id="spdVal">—</div>
     <div class="pips" id="spdPips"></div>
+  </section>
+
+  <section class="card knob" id="kCloud">
+    <h2>Cloud <small>shimmer speed</small></h2>
+    <div class="big none" id="cldVal">—</div>
+    <div class="pips" id="cldPips"></div>
   </section>
 
   <section class="card knob" id="kLevel">
@@ -457,8 +465,8 @@ function renderKnobs() {
   if (chips.children.length !== pals.length) chips.innerHTML = pals.map(p => `<span>${p.name}</span>`).join('');
 
   if (!st) {
-    for (const id of ['palVal', 'spdVal', 'lvlVal']) { $(id).textContent = '—'; $(id).classList.add('none'); }
-    pips($('spdPips'), -1); pips($('lvlPips'), -1);
+    for (const id of ['palVal', 'spdVal', 'cldVal', 'lvlVal']) { $(id).textContent = '—'; $(id).classList.add('none'); }
+    pips($('spdPips'), -1); pips($('cldPips'), -1); pips($('lvlPips'), -1);
     return;
   }
 
@@ -474,6 +482,12 @@ function renderKnobs() {
   const sHtml = `${knobText(st.speed)}<em>${knobTag(st.speed)}</em>`;
   if (sv.innerHTML !== sHtml) { sv.innerHTML = sHtml; bump(sv); }
   pips($('spdPips'), Math.round(st.speed.pct / 10) - 1);
+
+  const cv = $('cldVal');
+  cv.classList.toggle('none', !st.cloud);
+  const cHtml = st.cloud ? `${knobText(st.cloud)}<em>${knobTag(st.cloud)}</em>` : '—';
+  if (cv.innerHTML !== cHtml) { cv.innerHTML = cHtml; if (st.cloud) bump(cv); }
+  pips($('cldPips'), st.cloud ? Math.round(st.cloud.pct / 10) - 1 : -1);
 
   const lv = $('lvlVal');
   lv.classList.remove('none');
@@ -698,9 +712,9 @@ function renderCharts() {
 }
 
 /* ── meters ────────────────────────────────────────────────────
-   Four dual-scale meters. The three settings are stepped from the keyboard,
+   Five dual-scale meters. The four settings are stepped from the keyboard,
    so their meters read the step: numbered on the top scale, with what it
-   means below (the speed multiplier, the level percentage). The draw meter
+   means below (the speed multipliers, the level percentage). The draw meter
    reads amps on top and watts at 5 V below. The needle is a CSS transform
    with a transition, so each new reading swings in from wherever it is. */
 const SWEEP = 42;                       // degrees either side of upright
@@ -789,6 +803,11 @@ const speedTable   = () => S.firmware.steps?.speed || [];
 const levelSteps   = () => S.firmware.steps?.level || 10;
 const speedSteps   = () => speedTable().length || 10;
 
+// speed and cloud share a table: multipliers at the ends and at 1×, read in ×
+const speedFace = id => stepFace(id, '×', speedSteps(),
+  speedTable().map((m, i) => m === 1 || i === 0 || i === speedSteps() - 1 ? num(m) : null));
+const speedDigits = i => speedTable()[i] != null ? speedTable()[i].toFixed(2) : String(i + 1);
+
 // the status line reports a step as (step + 1) × 100 / steps, rounded down
 const stepOfPct = (pct, n) => Math.max(0, Math.min(n - 1, Math.ceil(pct * n / 100) - 1));
 
@@ -817,17 +836,22 @@ const METERS = [
     frac: i => stepFrac(i, paletteSteps()),
     digits: i => String(i + 1) },
   { id: 'mtr1', name: 'Speed', unit: '×',
-    face: id => stepFace(id, '×', speedSteps(), speedTable().map((m, i) => m === 1 || i === 0 || i === speedSteps() - 1 ? num(m) : null)),
+    face: id => speedFace(id),
     read: st => stepOfPct(st.speed.pct, speedSteps()),
     frac: i => stepFrac(i, speedSteps()),
-    digits: i => speedTable()[i] != null ? speedTable()[i].toFixed(2) : String(i + 1) },
-  { id: 'mtr2', name: 'Level', unit: '%',
+    digits: i => speedDigits(i) },
+  { id: 'mtr2', name: 'Cloud', unit: '×',
+    face: id => speedFace(id),
+    read: st => st.cloud ? stepOfPct(st.cloud.pct, speedSteps()) : null,
+    frac: i => stepFrac(i, speedSteps()),
+    digits: i => speedDigits(i) },
+  { id: 'mtr3', name: 'Level', unit: '%',
     face: id => stepFace(id, '%', levelSteps(), Array.from({ length: levelSteps() }, (_, i) =>
       i === 0 || i === levelSteps() - 1 ? Math.floor((i + 1) * 100 / levelSteps()) : null)),
     read: st => st.level.chaos ? levelSteps() - 1 : stepOfPct(st.level.pct, levelSteps()),
     frac: i => stepFrac(i, levelSteps()),
     digits: i => String(Math.floor((i + 1) * 100 / levelSteps())) },
-  { id: 'mtr3', name: 'Draw', unit: 'A', face: ampFace, read: st => st.mA,
+  { id: 'mtr4', name: 'Draw', unit: 'A', face: ampFace, read: st => st.mA,
     frac: v => v / 1000 / ampMax,
     digits: v => { const a = v / 1000; return a < 10 ? a.toFixed(2) : a < 100 ? a.toFixed(1) : String(Math.min(999, Math.round(a))); } },
 ];

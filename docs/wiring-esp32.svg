@@ -46,14 +46,14 @@
 <rect class="card" x="60" y="180" width="440" height="236" rx="8"/>
 <text class="ttl" x="80" y="212" text-anchor="start">CONTROLS</text>
 <text class="note" x="184" y="212" text-anchor="start">keyboard, over the USB cable</text>
-<text class="val" x="80" y="250" text-anchor="start">p  s  l</text>
-<text class="t" x="170" y="250" text-anchor="start">pick palette, speed or level</text>
+<text class="val" x="80" y="250" text-anchor="start">p  s  c  l</text>
+<text class="t" x="190" y="250" text-anchor="start">palette, speed, cloud speed, level</text>
 <text class="val" x="80" y="280" text-anchor="start">+  -</text>
-<text class="t" x="170" y="280" text-anchor="start">step it; wraps past either end</text>
+<text class="t" x="190" y="280" text-anchor="start">step it; wraps past either end</text>
 <text class="val" x="80" y="310" text-anchor="start">h</text>
-<text class="t" x="170" y="310" text-anchor="start">hold: one segment lit, storm paused</text>
+<text class="t" x="190" y="310" text-anchor="start">hold: one segment lit, storm paused</text>
 <text class="val" x="80" y="340" text-anchor="start">0 – 6</text>
-<text class="t" x="170" y="340" text-anchor="start">while holding, the segment to light</text>
+<text class="t" x="190" y="340" text-anchor="start">while holding, the segment to light</text>
 <text class="note" x="80" y="376" text-anchor="start">Type into pio device monitor. Each change prints</text>
 <text class="note" x="80" y="392" text-anchor="start">a [keys] line, and the dashboard follows.</text>
 <rect class="board" x="670" y="96" width="260" height="794" rx="14"/>
@@ -320,7 +320,7 @@
 <line class="w" x1="34" y1="981" x2="48" y2="981"/>
 <line class="w" x1="38" y1="986" x2="44" y2="986"/>
 <text class="t" x="60" y="988" text-anchor="start">Every ground symbol joins a GND pin. Both GND pins on the board are the same net.</text>
-<text class="note" x="30" y="1018" text-anchor="start">No knobs: palette, speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.</text>
+<text class="note" x="30" y="1018" text-anchor="start">No knobs: palette, speed, cloud speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.</text>
 <text class="note" x="30" y="1036" text-anchor="start">Strip data is 3.3 V into a 5 V strip. Short runs usually work. If the first pixel glitches, add a 74AHCT125 level shifter before the 330 Ω.</text>
 <text class="note" x="30" y="1054" text-anchor="start">EN resets the board. Hold BOOT while tapping EN to force the flasher, only if an upload will not start on its own.</text>
 </svg>

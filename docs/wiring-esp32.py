@@ -129,14 +129,14 @@ KX, KY, KW = 60, 180, 440
 add(f'<rect class="card" x="{KX}" y="{KY}" width="{KW}" height="236" rx="8"/>')
 text(KX + 20, KY + 32, "CONTROLS", "ttl")
 text(KX + 124, KY + 32, "keyboard, over the USB cable", "note")
-keys = [("p  s  l", "pick palette, speed or level"),
+keys = [("p  s  c  l", "palette, speed, cloud speed, level"),
         ("+  -", "step it; wraps past either end"),
         ("h", "hold: one segment lit, storm paused"),
         ("0 – 6", "while holding, the segment to light")]
 for k, (key, what) in enumerate(keys):
     y = KY + 70 + k * 30
     text(KX + 20, y, key, "val")
-    text(KX + 110, y, what, "t")
+    text(KX + 130, y, what, "t")
 text(KX + 20, KY + 196, "Type into pio device monitor. Each change prints", "note")
 text(KX + 20, KY + 212, "a [keys] line, and the dashboard follows.", "note")
 
@@ -290,7 +290,7 @@ text(60, LY + 30, "Input only (GPIO34–39): no output, no internal pull-up. Wro
 gnd(41, LY + 46)
 text(60, LY + 58, "Every ground symbol joins a GND pin. Both GND pins on the board are the same net.", "t")
 notes = [
-    "No knobs: palette, speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.",
+    "No knobs: palette, speed, cloud speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.",
     "Strip data is 3.3 V into a 5 V strip. Short runs usually work. If the first pixel glitches, add a 74AHCT125 level shifter before the 330 Ω.",
     "EN resets the board. Hold BOOT while tapping EN to force the flasher, only if an upload will not start on its own.",
 ]

@@ -16,6 +16,7 @@ test('status line, quiet sky', () => {
   assert.equal(p.strike, null);
   assert.equal(p.fps, 99);
   assert.equal(p.mA, 240);
+  assert.equal(p.cloud, null);             // older firmware, no cloud field
 });
 
 test('status line with a space in the palette, overlap and ends', () => {
@@ -24,6 +25,13 @@ test('status line with a space in the palette, overlap and ends', () => {
   assert.deepEqual(p.speed, { pct: 10, min: true, max: false });
   assert.deepEqual(p.level, { chaos: false, pct: 100, min: false, max: true });
   assert.deepEqual(p.strike, { name: 'Bolt_Centre', overlap: 1 });
+});
+
+test('status line with the cloud speed', () => {
+  const p = parseLine('palette: storm       speed: 60%         cloud: 10% (min)   level: 40%        | strike: _                | fps:  99  mA:  240');
+  assert.deepEqual(p.speed, { pct: 60, min: false, max: false });
+  assert.deepEqual(p.cloud, { pct: 10, min: true, max: false });
+  assert.deepEqual(p.level, { chaos: false, pct: 40, min: false, max: false });
 });
 
 test('chaos, behind a time filter prefix', () => {
