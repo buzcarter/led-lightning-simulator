@@ -24,19 +24,25 @@ void setup() {
   controlsBegin();
   chaosBegin();
   moodBegin();
+  consoleBegin();
 }
 
 void loop() {
+  consolePoll();
   controlsUpdate(false);
-  uint32_t now = stormClock();     // virtual: the speed knob stretches this
-  chaosPoll(millis(), now);        // button in real time, strikes in storm time
-  moodUpdate(millis());
 
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
-  renderAmbient(now);
-  scheduleStrikes(now);
-  for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
+  if (g_hold) {
+    renderHold();                  // storm paused: its clock does not advance
+  } else {
+    uint32_t now = stormClock();   // virtual: the speed knob stretches this
+    chaosPoll(millis(), now);      // button in real time, strikes in storm time
+    renderAmbient(now);
+    scheduleStrikes(now);
+    for (uint8_t i = 0; i < MAX_STRIKES; i++) renderStrike(strikes[i], now);
+  }
+  moodUpdate(millis());
 
   uint32_t drawmW = stripShow(leds, frameBrightness());
   logDashboard(millis(), drawmW);  // wall-clock, not the speed-scaled storm clock

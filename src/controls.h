@@ -217,6 +217,12 @@ void chaosFire(uint32_t realNow, uint32_t stormNow) {
   LOG("[storm] CHAOS -- %u channels\n", (unsigned)k);
 }
 
+/* Back to the knobs at once, wherever the envelope was. */
+void chaosCancel() {
+  chaosAt = 0; g_chaos = 0;
+  g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
+}
+
 void chaosBegin() {
   pinMode(CHAOS_PIN, INPUT_PULLUP);
   LOG("[storm] chaos button GPIO%u to GND\n", (unsigned)CHAOS_PIN);
@@ -236,8 +242,7 @@ void chaosPoll(uint32_t realNow, uint32_t stormNow) {
   if (!chaosAt) return;
   uint32_t e = realNow - chaosAt;
   if (e >= (uint32_t)CHAOS_HOLD_MS + CHAOS_DECAY_MS) {
-    chaosAt = 0; g_chaos = 0;
-    g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
+    chaosCancel();
     return;
   }
   uint8_t amt = 255;
@@ -251,8 +256,40 @@ void chaosPoll(uint32_t realNow, uint32_t stormNow) {
 }
 
 #else
+inline void chaosCancel() {}
 inline void chaosBegin() {}
 inline void chaosPoll(uint32_t, uint32_t) {}
+#endif
+
+/* ── console ────────────────────────────────────────────────── */
+/* Keys typed into the serial monitor (pio device monitor passes them through).
+
+     h      hold mode on/off: one segment lit steady, the storm paused
+     0-9    while holding, the segment to light, in SEGMENTS[] order
+
+   Hold starts on segment 0, the cloud body. Needs STORM_LOG, which is what
+   opens the serial port. */
+#if STORM_LOG
+
+void consoleBegin() {
+  LOG("[keys]  h hold one segment, then 0-%u to pick it\n", (unsigned)(NUM_SEGMENTS - 1));
+}
+
+void consolePoll() {
+  while (Serial.available()) {
+    int c = Serial.read();
+    if (c == 'h' || c == 'H') {
+      if (!g_hold) chaosCancel();          // so hold shows the level knob's brightness
+      holdSet(!g_hold);
+    } else if (g_hold && c >= '0' && c <= '9') {
+      holdSelect((uint8_t)(c - '0'));
+    }
+  }
+}
+
+#else
+inline void consoleBegin() {}
+inline void consolePoll() {}
 #endif
 
 #if POTS_ENABLE
