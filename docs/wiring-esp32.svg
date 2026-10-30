@@ -3,12 +3,12 @@
 <style>
   svg{--bg:#fbfaf7;--ink:#1d2024;--ink2:#5a6068;--ink3:#8d939b;--rule:#d9d6cf;
       --board:#1f2328;--board-ink:#e9ecef;--module:#c9ccd1;--module-ink:#2a2e33;
-      --v33:#c8463a;--v5:#d07a12;--gnd:#30343a;--pot:#2b7cb5;--mood:#8a4fbf;
+      --v33:#c8463a;--v5:#d07a12;--gnd:#30343a;
       --chaos:#b3811c;--strip:#3f8f5a;--io:#9aa0a8}
   @media (prefers-color-scheme: dark){
     svg{--bg:#15181c;--ink:#e8eaed;--ink2:#a2a9b2;--ink3:#6e757e;--rule:#30353b;
         --board:#0c0e10;--board-ink:#d8dce0;--module:#3a3f46;--module-ink:#e0e3e6;
-        --v33:#ef7466;--v5:#f0a243;--gnd:#b7bec6;--pot:#62aee0;--mood:#b98ae6;
+        --v33:#ef7466;--v5:#f0a243;--gnd:#b7bec6;
         --chaos:#e0b14f;--strip:#68ba84;--io:#6e757e}}
   .bg{fill:var(--bg)}
   text{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;fill:var(--ink)}
@@ -43,6 +43,19 @@
 <rect class="bg" width="1560" height="1130"/>
 <text class="h1" x="30" y="46" text-anchor="start">StormCloud wiring · ESP32 DevKit V1 (30-pin)</text>
 <text class="h2" x="30" y="70" text-anchor="start">Top view, USB at the bottom. Pin order matches the board silkscreen. Pins in colour are used; grey are free.</text>
+<rect class="card" x="60" y="180" width="440" height="236" rx="8"/>
+<text class="ttl" x="80" y="212" text-anchor="start">CONTROLS</text>
+<text class="note" x="184" y="212" text-anchor="start">keyboard, over the USB cable</text>
+<text class="val" x="80" y="250" text-anchor="start">p  s  c  l</text>
+<text class="t" x="190" y="250" text-anchor="start">palette, speed, cloud speed, level</text>
+<text class="val" x="80" y="280" text-anchor="start">+  -</text>
+<text class="t" x="190" y="280" text-anchor="start">step it; wraps past either end</text>
+<text class="val" x="80" y="310" text-anchor="start">h</text>
+<text class="t" x="190" y="310" text-anchor="start">hold: one segment lit, storm paused</text>
+<text class="val" x="80" y="340" text-anchor="start">0 – 6</text>
+<text class="t" x="190" y="340" text-anchor="start">while holding, the segment to light</text>
+<text class="note" x="80" y="376" text-anchor="start">Type into pio device monitor. Each change prints</text>
+<text class="note" x="80" y="392" text-anchor="start">a [keys] line, and the dashboard follows.</text>
 <rect class="board" x="670" y="96" width="260" height="794" rx="14"/>
 <circle cx="686" cy="112" r="8" fill="var(--bg)"/>
 <circle cx="914" cy="112" r="8" fill="var(--bg)"/>
@@ -87,8 +100,8 @@
 <line class="w" x1="662" y1="316" x2="688" y2="316"/>
 <rect class="pin" x="682" y="310" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="320.5" text-anchor="start">D34</text>
-<rect class="tag" x="572" y="304" width="90" height="24" rx="12" fill="var(--pot)" stroke="var(--pot)"/>
-<text class="tag-t" x="617.0" y="320" text-anchor="middle" style="fill:#fff">GPIO34</text>
+<rect class="tag" x="572" y="304" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)" stroke-dasharray="4 3"/>
+<text class="tag-t" x="617.0" y="320" text-anchor="middle" style="fill:var(--ink2)">GPIO34</text>
 <line class="w" x1="662" y1="358" x2="688" y2="358"/>
 <rect class="pin" x="682" y="352" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="362.5" text-anchor="start">D35</text>
@@ -97,23 +110,23 @@
 <line class="w" x1="662" y1="400" x2="688" y2="400"/>
 <rect class="pin" x="682" y="394" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="404.5" text-anchor="start">D32</text>
-<rect class="tag" x="572" y="388" width="90" height="24" rx="12" fill="var(--pot)" stroke="var(--pot)"/>
-<text class="tag-t" x="617.0" y="404" text-anchor="middle" style="fill:#fff">GPIO32</text>
+<rect class="tag" x="572" y="388" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)"/>
+<text class="tag-t" x="617.0" y="404" text-anchor="middle" style="fill:var(--ink2)">GPIO32</text>
 <line class="w" x1="662" y1="442" x2="688" y2="442"/>
 <rect class="pin" x="682" y="436" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="446.5" text-anchor="start">D33</text>
-<rect class="tag" x="572" y="430" width="90" height="24" rx="12" fill="var(--pot)" stroke="var(--pot)"/>
-<text class="tag-t" x="617.0" y="446" text-anchor="middle" style="fill:#fff">GPIO33</text>
+<rect class="tag" x="572" y="430" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)"/>
+<text class="tag-t" x="617.0" y="446" text-anchor="middle" style="fill:var(--ink2)">GPIO33</text>
 <line class="w" x1="662" y1="484" x2="688" y2="484"/>
 <rect class="pin" x="682" y="478" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="488.5" text-anchor="start">D25</text>
-<rect class="tag" x="572" y="472" width="90" height="24" rx="12" fill="var(--mood)" stroke="var(--mood)"/>
-<text class="tag-t" x="617.0" y="488" text-anchor="middle" style="fill:#fff">GPIO25</text>
+<rect class="tag" x="572" y="472" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)"/>
+<text class="tag-t" x="617.0" y="488" text-anchor="middle" style="fill:var(--ink2)">GPIO25</text>
 <line class="w" x1="662" y1="526" x2="688" y2="526"/>
 <rect class="pin" x="682" y="520" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="530.5" text-anchor="start">D26</text>
-<rect class="tag" x="572" y="514" width="90" height="24" rx="12" fill="var(--mood)" stroke="var(--mood)"/>
-<text class="tag-t" x="617.0" y="530" text-anchor="middle" style="fill:#fff">GPIO26</text>
+<rect class="tag" x="572" y="514" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)"/>
+<text class="tag-t" x="617.0" y="530" text-anchor="middle" style="fill:var(--ink2)">GPIO26</text>
 <line class="w" x1="662" y1="568" x2="688" y2="568"/>
 <rect class="pin" x="682" y="562" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="572.5" text-anchor="start">D27</text>
@@ -132,8 +145,8 @@
 <line class="w" x1="662" y1="694" x2="688" y2="694"/>
 <rect class="pin" x="682" y="688" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="698.5" text-anchor="start">D13</text>
-<rect class="tag" x="572" y="682" width="90" height="24" rx="12" fill="var(--mood)" stroke="var(--mood)"/>
-<text class="tag-t" x="617.0" y="698" text-anchor="middle" style="fill:#fff">GPIO13</text>
+<rect class="tag" x="572" y="682" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)"/>
+<text class="tag-t" x="617.0" y="698" text-anchor="middle" style="fill:var(--ink2)">GPIO13</text>
 <line class="w" x1="662" y1="736" x2="688" y2="736"/>
 <rect class="pin" x="682" y="730" width="12" height="12" rx="2"/>
 <text class="silk" x="702" y="740.5" text-anchor="start">GND</text>
@@ -217,86 +230,8 @@
 <line class="w" x1="912" y1="778" x2="938" y2="778"/>
 <rect class="pin" x="906" y="772" width="12" height="12" rx="2"/>
 <text class="silk" x="898" y="782.5" text-anchor="end">3V3</text>
-<rect class="tag" x="938" y="766" width="90" height="24" rx="12" fill="var(--v33)" stroke="var(--v33)"/>
-<text class="tag-t" x="983.0" y="782" text-anchor="middle" style="fill:#fff">3V3 OUT</text>
-<text class="ttl" x="100" y="104" text-anchor="middle">SPEED</text>
-<line class="v33" x1="89" y1="132" x2="111" y2="132"/>
-<text class="flag v33" x="100" y="125" text-anchor="middle">3V3</text>
-<line class="w" x1="100" y1="132" x2="100" y2="168"/>
-<rect class="part" x="90" y="168" width="20" height="74" rx="2"/>
-<text class="note" x="114" y="164" text-anchor="start">3</text>
-<text class="note" x="114" y="256" text-anchor="start">1</text>
-<line class="w" x1="100" y1="242" x2="100" y2="268"/>
-<line class="w" x1="89" y1="268" x2="111" y2="268"/>
-<line class="w" x1="93" y1="273" x2="107" y2="273"/>
-<line class="w" x1="97" y1="278" x2="103" y2="278"/>
-<path class="w" d="M140,205 L116,205"/>
-<path d="M111,205 l9,-5 v10 z" fill="var(--ink)"/>
-<text class="note" x="122" y="197" text-anchor="start">2</text>
-<line class="w" x1="140" y1="205" x2="200" y2="205"/>
-<circle class="jn" cx="152" cy="205" r="3.5"/>
-<line class="w" x1="152" y1="205" x2="152" y2="236"/>
-<line class="plate" x1="140" y1="236" x2="164" y2="236"/>
-<line class="plate" x1="140" y1="244" x2="164" y2="244"/>
-<text class="val" x="166" y="244" text-anchor="start">100n</text>
-<line class="w" x1="152" y1="244" x2="152" y2="268"/>
-<line class="w" x1="141" y1="268" x2="163" y2="268"/>
-<line class="w" x1="145" y1="273" x2="159" y2="273"/>
-<line class="w" x1="149" y1="278" x2="155" y2="278"/>
-<path class="w" d="M200,205 L200,442 L572,442" style="stroke:var(--pot)"/>
-<path class="w" d="M140,205 L200,205" style="stroke:var(--pot)"/>
-<text class="ttl" x="260" y="104" text-anchor="middle">PALETTE</text>
-<line class="v33" x1="249" y1="132" x2="271" y2="132"/>
-<text class="flag v33" x="260" y="125" text-anchor="middle">3V3</text>
-<line class="w" x1="260" y1="132" x2="260" y2="168"/>
-<rect class="part" x="250" y="168" width="20" height="74" rx="2"/>
-<text class="note" x="274" y="164" text-anchor="start">3</text>
-<text class="note" x="274" y="256" text-anchor="start">1</text>
-<line class="w" x1="260" y1="242" x2="260" y2="268"/>
-<line class="w" x1="249" y1="268" x2="271" y2="268"/>
-<line class="w" x1="253" y1="273" x2="267" y2="273"/>
-<line class="w" x1="257" y1="278" x2="263" y2="278"/>
-<path class="w" d="M300,205 L276,205"/>
-<path d="M271,205 l9,-5 v10 z" fill="var(--ink)"/>
-<text class="note" x="282" y="197" text-anchor="start">2</text>
-<line class="w" x1="300" y1="205" x2="360" y2="205"/>
-<circle class="jn" cx="312" cy="205" r="3.5"/>
-<line class="w" x1="312" y1="205" x2="312" y2="236"/>
-<line class="plate" x1="300" y1="236" x2="324" y2="236"/>
-<line class="plate" x1="300" y1="244" x2="324" y2="244"/>
-<text class="val" x="326" y="244" text-anchor="start">100n</text>
-<line class="w" x1="312" y1="244" x2="312" y2="268"/>
-<line class="w" x1="301" y1="268" x2="323" y2="268"/>
-<line class="w" x1="305" y1="273" x2="319" y2="273"/>
-<line class="w" x1="309" y1="278" x2="315" y2="278"/>
-<path class="w" d="M360,205 L360,400 L572,400" style="stroke:var(--pot)"/>
-<path class="w" d="M300,205 L360,205" style="stroke:var(--pot)"/>
-<text class="ttl" x="420" y="104" text-anchor="middle">LEVEL</text>
-<line class="v33" x1="409" y1="132" x2="431" y2="132"/>
-<text class="flag v33" x="420" y="125" text-anchor="middle">3V3</text>
-<line class="w" x1="420" y1="132" x2="420" y2="168"/>
-<rect class="part" x="410" y="168" width="20" height="74" rx="2"/>
-<text class="note" x="434" y="164" text-anchor="start">3</text>
-<text class="note" x="434" y="256" text-anchor="start">1</text>
-<line class="w" x1="420" y1="242" x2="420" y2="268"/>
-<line class="w" x1="409" y1="268" x2="431" y2="268"/>
-<line class="w" x1="413" y1="273" x2="427" y2="273"/>
-<line class="w" x1="417" y1="278" x2="423" y2="278"/>
-<path class="w" d="M460,205 L436,205"/>
-<path d="M431,205 l9,-5 v10 z" fill="var(--ink)"/>
-<text class="note" x="442" y="197" text-anchor="start">2</text>
-<line class="w" x1="460" y1="205" x2="520" y2="205"/>
-<circle class="jn" cx="472" cy="205" r="3.5"/>
-<line class="w" x1="472" y1="205" x2="472" y2="236"/>
-<line class="plate" x1="460" y1="236" x2="484" y2="236"/>
-<line class="plate" x1="460" y1="244" x2="484" y2="244"/>
-<text class="val" x="486" y="244" text-anchor="start">100n</text>
-<line class="w" x1="472" y1="244" x2="472" y2="268"/>
-<line class="w" x1="461" y1="268" x2="483" y2="268"/>
-<line class="w" x1="465" y1="273" x2="479" y2="273"/>
-<line class="w" x1="469" y1="278" x2="475" y2="278"/>
-<path class="w" d="M520,205 L520,316 L572,316" style="stroke:var(--pot)"/>
-<path class="w" d="M460,205 L520,205" style="stroke:var(--pot)"/>
+<rect class="tag" x="938" y="766" width="90" height="24" rx="12" fill="var(--bg)" stroke="var(--io)"/>
+<text class="tag-t" x="983.0" y="782" text-anchor="middle" style="fill:var(--ink2)">3V3 OUT</text>
 <path class="w" d="M572,568 L520,568 L520,586" style="stroke:var(--chaos)"/>
 <circle class="part" cx="520" cy="588" r="3"/>
 <circle class="part" cx="520" cy="618" r="3"/>
@@ -310,65 +245,12 @@
 <text class="ttl" x="484" y="596" text-anchor="end">CHAOS</text>
 <text class="note" x="484" y="612" text-anchor="end">momentary</text>
 <text class="note" x="484" y="626" text-anchor="end">to GND, no resistor</text>
-<rect class="box" x="140" y="470" width="146" height="168" rx="8"/>
-<path class="w" d="M572,484 L286,484" style="stroke:var(--mood)"/>
-<rect class="part" x="444.0" y="476" width="52" height="16" rx="2"/>
-<text class="val" x="470" y="471" text-anchor="middle">220 Ω</text>
-<path class="w" d="M572,526 L286,526" style="stroke:var(--mood)"/>
-<rect class="part" x="444.0" y="518" width="52" height="16" rx="2"/>
-<text class="val" x="470" y="513" text-anchor="middle">39–68 Ω</text>
-<path class="w" d="M572,694 L330,694 L330,612 L286,612" style="stroke:var(--mood)"/>
-<rect class="part" x="424.0" y="686" width="52" height="16" rx="2"/>
-<text class="val" x="450" y="681" text-anchor="middle">39–68 Ω</text>
-<line class="w" x1="218" y1="484" x2="286" y2="484"/>
-<path d="M200,484 L218,474 L218,494 Z" fill="#d6453a" stroke="var(--ink)" stroke-width="1.5"/>
-<line class="plate" x1="200" y1="474" x2="200" y2="494"/>
-<line class="w" x1="164" y1="484" x2="200" y2="484"/>
-<text class="val" x="226" y="478" text-anchor="start">R</text>
-<circle class="jn" cx="164" cy="484" r="3.5"/>
-<line class="w" x1="218" y1="526" x2="286" y2="526"/>
-<path d="M200,526 L218,516 L218,536 Z" fill="#2f9e55" stroke="var(--ink)" stroke-width="1.5"/>
-<line class="plate" x1="200" y1="516" x2="200" y2="536"/>
-<line class="w" x1="164" y1="526" x2="200" y2="526"/>
-<text class="val" x="226" y="520" text-anchor="start">G</text>
-<circle class="jn" cx="164" cy="526" r="3.5"/>
-<line class="w" x1="218" y1="612" x2="286" y2="612"/>
-<path d="M200,612 L218,602 L218,622 Z" fill="#2f6fd6" stroke="var(--ink)" stroke-width="1.5"/>
-<line class="plate" x1="200" y1="602" x2="200" y2="622"/>
-<line class="w" x1="164" y1="612" x2="200" y2="612"/>
-<text class="val" x="226" y="606" text-anchor="start">B</text>
-<circle class="jn" cx="164" cy="612" r="3.5"/>
-<line class="w" x1="164" y1="484" x2="164" y2="660"/>
-<line class="w" x1="153" y1="660" x2="175" y2="660"/>
-<line class="w" x1="157" y1="665" x2="171" y2="665"/>
-<line class="w" x1="161" y1="670" x2="167" y2="670"/>
-<text class="note" x="176" y="676" text-anchor="start">common cathode (K)</text>
-<text class="ttl" x="140" y="464" text-anchor="start">MOOD LED</text>
-<text class="note" x="236" y="464" text-anchor="start">RGB, common cathode</text>
-<rect class="card" x="30" y="722" width="292" height="178" rx="8"/>
-<text class="note" x="44" y="744" text-anchor="start">MOOD LED LEADS, flat side facing left</text>
-<path d="M70,820 L70,786 A34,34 0 0 1 138,786 L138,820 Z" fill="none" stroke="var(--ink)" stroke-width="2"/>
-<line class="plate" x1="66" y1="820" x2="142" y2="820"/>
-<line class="plate" x1="70" y1="780" x2="70" y2="820"/>
-<line x1="80" y1="820" x2="80" y2="858" stroke="#d6453a" stroke-width="3"/>
-<line x1="96" y1="820" x2="96" y2="874" stroke="var(--ink)" stroke-width="3"/>
-<line x1="112" y1="820" x2="112" y2="862" stroke="#2f9e55" stroke-width="3"/>
-<line x1="128" y1="820" x2="128" y2="860" stroke="#2f6fd6" stroke-width="3"/>
-<text class="val" x="156" y="784" text-anchor="start">R · K · G · B</text>
-<text class="note" x="156" y="806" text-anchor="start">K is the longest leg.</text>
-<text class="note" x="156" y="822" text-anchor="start">It goes to GND.</text>
-<text class="note" x="156" y="846" text-anchor="start">Not 220 Ω on all three:</text>
-<text class="note" x="156" y="862" text-anchor="start">that is a 5 V figure.</text>
-<text class="note" x="80" y="872" text-anchor="middle">R</text>
-<text class="note" x="96" y="888" text-anchor="middle">K</text>
-<text class="note" x="112" y="876" text-anchor="middle">G</text>
-<text class="note" x="128" y="874" text-anchor="middle">B</text>
 <line class="w" x1="572" y1="736" x2="548" y2="736"/>
 <line class="w" x1="548" y1="736" x2="548" y2="748"/>
 <line class="w" x1="537" y1="748" x2="559" y2="748"/>
 <line class="w" x1="541" y1="753" x2="555" y2="753"/>
 <line class="w" x1="545" y1="758" x2="551" y2="758"/>
-<text class="note" x="538" y="740" text-anchor="end">pots, button, LED</text>
+<text class="note" x="538" y="740" text-anchor="end">button</text>
 <path class="v5" d="M572,778 L520,778" style="fill:none"/>
 <path d="M520,778 l-12,-7 v14 z" fill="var(--v5)"/>
 <text class="note" x="500" y="782" text-anchor="end">+5V: USB or strip supply</text>
@@ -420,35 +302,25 @@
 <text class="val" x="1044" y="690" text-anchor="start">common ground:</text>
 <text class="note" x="1044" y="704" text-anchor="start">strip, supply and</text>
 <text class="note" x="1044" y="718" text-anchor="start">ESP32 must share GND</text>
-<path class="v33" d="M1028,778 L1090,778" style="fill:none"/>
-<path d="M1090,778 l0,-7 l12,7 l-12,7 z" fill="var(--v33)"/>
-<text class="note" x="1044" y="800" text-anchor="start">to leg 3 of each pot</text>
 <text class="note" x="1044" y="576" text-anchor="start">Not D2: it also drives</text>
 <text class="note" x="1044" y="590" text-anchor="start">the blue on-board LED,</text>
 <text class="note" x="1044" y="604" text-anchor="start">which loads the data line.</text>
 <line x1="30" y1="910" x2="1530" y2="910" stroke="var(--rule)" stroke-width="1"/>
-<rect x="30" y="920" width="22" height="14" rx="7" fill="var(--pot)"/>
-<text class="t" x="60" y="932" text-anchor="start">Pots: palette D32, speed D33, level D34</text>
-<rect x="354.7" y="920" width="22" height="14" rx="7" fill="var(--mood)"/>
-<text class="t" x="384.7" y="932" text-anchor="start">Mood LED: R D25, G D26, B D13</text>
-<rect x="606.4" y="920" width="22" height="14" rx="7" fill="var(--chaos)"/>
-<text class="t" x="636.4" y="932" text-anchor="start">Chaos button: D27</text>
-<rect x="770.5" y="920" width="22" height="14" rx="7" fill="var(--strip)"/>
-<text class="t" x="800.5" y="932" text-anchor="start">Strip data: D18</text>
-<rect x="920.0" y="920" width="22" height="14" rx="7" fill="var(--v33)"/>
-<text class="t" x="950.0" y="932" text-anchor="start">3.3 V</text>
-<rect x="996.5" y="920" width="22" height="14" rx="7" fill="var(--v5)"/>
-<text class="t" x="1026.5" y="932" text-anchor="start">5 V</text>
-<rect x="1058.4" y="920" width="22" height="14" rx="7" fill="var(--gnd)"/>
-<text class="t" x="1088.4" y="932" text-anchor="start">Ground</text>
+<rect x="30" y="920" width="22" height="14" rx="7" fill="var(--chaos)"/>
+<text class="t" x="60" y="932" text-anchor="start">Chaos button: D27</text>
+<rect x="194.1" y="920" width="22" height="14" rx="7" fill="var(--strip)"/>
+<text class="t" x="224.1" y="932" text-anchor="start">Strip data: D18</text>
+<rect x="343.6" y="920" width="22" height="14" rx="7" fill="var(--v5)"/>
+<text class="t" x="373.6" y="932" text-anchor="start">5 V</text>
+<rect x="405.5" y="920" width="22" height="14" rx="7" fill="var(--gnd)"/>
+<text class="t" x="435.5" y="932" text-anchor="start">Ground</text>
 <rect x="30" y="948" width="22" height="14" rx="7" fill="var(--bg)" stroke="var(--io)" stroke-dasharray="4 3"/>
-<text class="t" x="60" y="960" text-anchor="start">Input only (GPIO34–39): no output, no internal pull-up. Fine for pots, wrong for the button.</text>
+<text class="t" x="60" y="960" text-anchor="start">Input only (GPIO34–39): no output, no internal pull-up. Wrong for the button.</text>
 <line class="w" x1="30" y1="976" x2="52" y2="976"/>
 <line class="w" x1="34" y1="981" x2="48" y2="981"/>
 <line class="w" x1="38" y1="986" x2="44" y2="986"/>
 <text class="t" x="60" y="988" text-anchor="start">Every ground symbol joins a GND pin. Both GND pins on the board are the same net.</text>
-<text class="note" x="30" y="1018" text-anchor="start">Pots are B10K linear. Leg 1 to GND, leg 3 to 3V3, middle leg 2 to the pin; swap 1 and 3 to reverse a knob. Solder the 100 nF at the ESP32 end of the wiper wire. 3.3 V only, never 5 V.</text>
-<text class="note" x="30" y="1036" text-anchor="start">ADC2 pins (D2, D4, D12–D15, D25–D27) lose analog input when WiFi is on. That is why the pots sit on ADC1 (D32–D35); the outputs on ADC2 pins are unaffected.</text>
-<text class="note" x="30" y="1054" text-anchor="start">Strip data is 3.3 V into a 5 V strip. Short runs usually work. If the first pixel glitches, add a 74AHCT125 level shifter before the 330 Ω.</text>
-<text class="note" x="30" y="1072" text-anchor="start">EN resets the board. Hold BOOT while tapping EN to force the flasher, only if an upload will not start on its own.</text>
+<text class="note" x="30" y="1018" text-anchor="start">No knobs: palette, speed, cloud speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.</text>
+<text class="note" x="30" y="1036" text-anchor="start">Strip data is 3.3 V into a 5 V strip. Short runs usually work. If the first pixel glitches, add a 74AHCT125 level shifter before the 330 Ω.</text>
+<text class="note" x="30" y="1054" text-anchor="start">EN resets the board. Hold BOOT while tapping EN to force the flasher, only if an upload will not start on its own.</text>
 </svg>

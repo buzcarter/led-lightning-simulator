@@ -170,7 +170,7 @@ The **Export** panel emits seven source files plus the layout. They are split al
 | File | Owner | Overwritten on export |
 |---|---|---|
 | `config.h` | **you** — pins, logging, palettes | never; the bench emits it as a starter only |
-| `controls.h` | **you** — pot pins and mapping | never; starter only |
+| `controls.h` | **you** — keyboard controls, chaos button | never; starter only |
 | `layout.h` | generator — segments, `LED_X`/`LED_Y` | wholesale |
 | `tuning.h` | generator — animation parameters | wholesale |
 | `storm.h` | generator — the engine: renders each frame into `leds[]` | wholesale |
@@ -195,16 +195,16 @@ The sketch logs to serial at 115200 (matching `monitor_speed` in `platformio.ini
 
 Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the define is `#ifndef`-guarded — drops Serial, the format strings, and the per-frame power measurement entirely. On an ESP32 that is **28 KB of flash and 368 bytes of RAM**, so the off switch is real rather than cosmetic.
 
-Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every knob nudge.
+Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every key press.
 
 ```
-palette: tornado     speed: 60%         level: 40%        | strike: Bolt_Left        | fps:  98  mA: 3180
-palette: tornado     speed: 60%         level: 40%        | strike: Bolt_Centre      | fps:  97  mA: 4020
-palette: tornado     speed: 60%         level: 40%        | strike: _                | fps:  99  mA:  240
-palette: voldemort   speed: 70%         level: 80%        | strike: Bolt_Centre +1   | fps:  96  mA: 5110
+palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: Bolt_Left        | fps:  98  mA: 3180
+palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: Bolt_Centre      | fps:  97  mA: 4020
+palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: _                | fps:  99  mA:  240
+palette: voldemort   speed: 70%         cloud: 50%         level: 80%        | strike: Bolt_Centre +1   | fps:  96  mA: 5110
 ```
 
-`strike` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`. `STORM_LOG_RAW 1` appends the raw 0–4095 ADC readings for the three knobs, the same units as the cutoffs in `DetentProfiles.h`.
+`strike` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`.
 
 Fields are fixed-width on purpose. A dashboard whose columns jump around is unreadable at a glance, which is the only thing it is for.
 
@@ -225,9 +225,9 @@ pio device monitor            # in another terminal, as usual
 
 The filter is switched on in `platformio.ini` (`monitor_filters = default, dashboard`). It sends UDP so the monitor never waits on the dashboard, and never notices whether it is running: with nothing listening, the packets are simply dropped. The service has no dependencies, so there is no `npm install`, and it needs Node 18 or later.
 
-Across the top is a meter rack: one backlit, dual-scale meter per knob and one for the draw, each with a nixie readout. A knob meter reads the wiper voltage on its lower scale. That voltage is the raw count × 3.3 V / 4095, which is approximate, because the ESP32's ADC is not linear near its ends; the red zone marks where it flattens out. The upper scale shows the detent the knob is in, with the cutoffs as ticks and the hysteresis bands in amber. The draw meter shows amps above and watts at 5 V below, with a red zone from the supply limit you type in. The needles swing to each new reading with a CSS transition. The digits update at most twice a second. The build asks for a status line at least every 750 ms (`STORM_LOG_STATS=750`), so the meters keep moving even when nothing changes. The pilot lamp is red while lines are arriving and amber when the board goes quiet.
+Across the top is a meter rack: one backlit, dual-scale meter per setting (palette, speed, cloud, level) and one for the draw, each with a nixie readout. A setting's meter reads its step, numbered on the upper scale, with what the step means below: the speed multipliers, the level percentage. The draw meter shows amps above and watts at 5 V below, with a red zone from the supply limit you type in. The needles swing to each new reading with a CSS transition. The digits update at most twice a second. The build asks for a status line at least every 750 ms (`STORM_LOG_STATS=750`), so the meters keep moving even when nothing changes. The pilot lamp is red while lines are arriving and amber when the board goes quiet.
 
-Below the rack, the page shows the three knobs, with the raw readings plotted against the detent cutoffs from `DetentProfiles.h`, so a knob resting within the hysteresis band of a cutoff shows as being on the edge. It draws the cloud from the pixel coordinates in `layout.h` and lights each strike's tree in the current palette's colours. It also counts strikes per root channel, charts frame rate and peak draw over the last five minutes against a supply limit you type in, and keeps a tail of the raw serial. The segment table comes from `src/layout.h` until the board's boot banner provides its own.
+Below the rack, the page shows the four settings. It draws the cloud from the pixel coordinates in `layout.h` and lights each strike's tree in the current palette's colours. It also counts strikes per root channel, charts frame rate and peak draw over the last five minutes against a supply limit you type in, and keeps a tail of the raw serial. The segment table comes from `src/layout.h` until the board's boot banner provides its own.
 
 The page reads the stream with Server-Sent Events rather than a WebSocket: data only flows one way, and `EventSource` reconnects by itself. Ports are `STORM_DASH_UDP` (7777) and `STORM_DASH_HTTP` (7778). The page is served on localhost only unless `STORM_DASH_BIND=0.0.0.0`. The service also serves the bench at `/simulator`.
 
@@ -257,59 +257,52 @@ The strip is on `GPIO18` (`LED_PIN`), WS2812B with `GRB` order (`LED_TYPE`), in 
 - `MAX_STRIKES` is 6 and `MAX_STROKES` is 6. Push the storm parameters hard enough and strikes will be dropped rather than queued.
 - Preview-only controls — dot size, bloom — model light diffusing through batting. They are not exported, because the controller has no equivalent.
 
-## Knobs
+## Controls
 
-Three B10K linear pots on ADC1 — palette on GPIO32, speed on GPIO33, level on GPIO34. `POTS_ENABLE 0` in `controls.h` compiles all of it out and falls back to `tuning.h`. The whole build (board pinout, pots, chaos button, mood LED and strip) is on the [wiring diagram](docs/wiring-esp32.svg). Pot detail is on the [pot wiring card](docs/pot-wiring-card.html) ([published](https://claude.ai/code/artifact/e60ec613-17e9-4cfb-9249-9f2a2cbecedb)).
+There are no knobs. Palette, speed, cloud speed and level are set from the keyboard of the computer the board is tethered to, typed into `pio device monitor` (which passes keys through to the board over the same USB cable). The chaos button is the only input on the board itself. The whole build (board pinout, chaos button and strip) is on the [wiring diagram](docs/wiring-esp32.svg).
 
-**All three knobs are 10-position detented rotary switches**: a 3D-printed detent on each pot, read by the `DetentSwitch` library in `lib/` (brought over from Project 16, the detent tuner). A continuous knob on a noisy 12-bit ADC is the worst of both worlds: never quite still, never repeatable. With physical detents each position lands in its own band of raw ADC counts, and the reading has to go 40 counts past a cutoff before the position changes, so a knob holds exactly where you left it.
+| Key | Does |
+|---|---|
+| `p` `s` `c` `l` | pick palette, speed, cloud speed or level |
+| `+` `-` | step it up or down; past either end it wraps to the other (`=` and `_` work too, so shift is optional) |
+| `h` | hold mode on/off: one segment lit steady, the storm paused |
+| `0`–`6` | while holding, the segment to light, in the order the boot banner lists them (0 is the cloud body) |
 
-Calibration lives in `lib/DetentSwitch/DetentProfiles.h`. All three knobs use `DETENT_10` (`POT_PROFILE` in `controls.h`), which was measured on GPIO34 with one knob. If a knob on another pin skips or sticks at a position, run the Project 16 tuner on it and give it its own profile.
+Each change prints a `[keys]` line with the new value, and the dashboard line follows. The keys need `STORM_LOG 1`, which is what opens the serial port; without it the settings stay at their start values.
 
-**The palette knob carries a whole look per detent, not a hue.** Rotating hue alone leaves `SAT` wherever the export left it, and at low saturation every hue is the same near-white — so the knob appears dead no matter how clean the reading is. Each detent sets hue, saturation, peak saturation and trim together from `PALETTES[]` in `config.h`. There are five palettes and ten positions, so the list repeats round the dial and every click still changes something; add rows there to fill it. Fine hue control belongs in the bench; the knob is for choosing.
+The board starts on speed 7 (70%, 1.32×), cloud 6 (60%, 1.00×) and level 9 (90%), and **cycles the palettes on its own**, a new one every 22 seconds. Changing the palette by hand restarts the 22 seconds, so a palette you pick gets its full turn. Both are set at the top of `controls.h`: `START_PALETTE`, `START_SPEED`, `START_CLOUD`, `START_LEVEL` and `PALETTE_CYCLE_MS` (0 turns the cycle off). Each change prints a `[cycle]` line.
 
-**Speed is geometric**, 0.25× to 3.03× across the 10 positions, with position 6 at exactly 1.00×. Equal twists give equal ratio changes; a linear speed knob spends most of its travel somewhere useless.
+**Palette carries a whole look per step, not a hue.** Rotating hue alone leaves `SAT` wherever the export left it, and at low saturation every hue is the same near-white. Each step sets hue, saturation, peak saturation and trim together from `PALETTES[]` in `config.h`; there are as many steps as rows there.
 
-It drives a **virtual clock, not scaled `millis()`**. Scaling `millis()` directly would teleport every strike in flight the instant the knob moved. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`.
+**Speed is geometric**, 0.25× to 3.03× across 10 steps, with step 6 at exactly 1.00× (`SPEED_Q8` in `controls.h`). Equal presses give equal ratio changes.
 
-**Sampling is rare and thorough** rather than constant and filtered. One knob is read every 250 ms round-robin, so each is refreshed about every 750 ms, with `PotReader` averaging 16 conversions per read. Averaging N conversions cuts noise by √N; a smoothing filter buys the same quiet only by adding lag, so there is no EMA at all.
+It drives a **virtual clock, not scaled `millis()`**. Scaling `millis()` directly would teleport every strike in flight the instant the speed changed. `stormClock()` accumulates instead — the same thing the bench does with `simTime += dt * speed`. It keeps the fraction of a millisecond each frame, so 0.25× really is 0.25× at 100 fps.
 
-**Level** has one stop per position, 0 to 100% in ninths. Position 1 is `POT_LEVEL_FLOOR`, not off.
+**Cloud speed** runs the cloud's ambient shimmer on a clock of its own (`cloudClock()`), from the same 0.25×–3.03× table. Speed runs the bolts, and with them the cloud's flash in sympathy with each strike, which belongs to the strike. At equal speeds the two clocks read the same, which is what the bench previews; the bench itself has only the one speed.
+
+**Level** has 10 steps, 0 to 100% in ninths. Step 1 is `LEVEL_FLOOR`, not off.
+
+**Hold** is for checking the wiring against the bench's routing: the chosen segment shows in the palette's peak colour at the level's brightness, everything else is dark, and each pick prints its pixel range. The storm's clock stops while holding, chaos is cancelled, and it resumes from a clear sky when hold ends.
 
 ## Chaos button
 
-A momentary button between `GPIO27` and ground, using the internal pull-up — two wires, no resistor, and it shares the ground rail already going to the pots. `CHAOS_ENABLE 0` compiles it out. Not on GPIO34–39: those have no internal pull-ups.
+A momentary button between `GPIO27` and ground, using the internal pull-up — two wires, no resistor. `CHAOS_ENABLE 0` compiles it out. Not on GPIO34–39: those have no internal pull-ups.
 
 A tap has a **shape**, rather than being a flat flash:
 
 | Phase | Duration | What happens |
 |---|---|---|
 | Volley | instant | Every root channel fires, staggered 90 ms so it reads as a cascade, not one white frame |
-| Hold | 2.5 s | Scheduler gaps collapse from 1400–5200 ms to 90–260 ms, every strike doubles, brightness ignores the level knob and goes to the ceiling |
-| Decay | 2.0 s | All three ease back to wherever the knobs are, like the storm moving off |
+| Hold | 2.5 s | Scheduler gaps collapse from 1400–5200 ms to 90–260 ms, every strike doubles, brightness ignores the level setting and goes to the ceiling |
+| Decay | 2.0 s | All three ease back to the settings, like the storm moving off |
 
-The envelope runs in **real** milliseconds while the strikes it schedules run on the **storm** clock — so a tap always lasts about four and a half seconds regardless of where the speed knob sits. Tapping again restarts it. The dashboard reads `level: CHAOS` throughout.
+The envelope runs in **real** milliseconds while the strikes it schedules run on the **storm** clock — so a tap always lasts about four and a half seconds regardless of the speed setting. Tapping again restarts it. The dashboard reads `level: CHAOS` throughout.
 
 The scheduler's gap and double-strike settings became runtime values to make this work, which is a down payment on the severity crossfade — that will drive the same three.
 
-## Mood LED
-
-A discrete 4-leg RGB LED on `GPIO25` / `GPIO26` / `GPIO13`, one PWM channel each, showing the live palette colour. It pulses on every strike and rides up during chaos, so one indicator covers mood, activity and fury. `MOOD_LED_ENABLE 0` compiles it out.
-
-It displays `coolC` — the *saturated* palette colour, not the near-white peak the strip renders at. An indicator showing what the pixels show would be white most of the time and useless.
-
-Two things that bite here:
-
-**`MOOD_COMMON_ANODE` must match the part.** Common cathode puts the long leg on ground and lights on HIGH; common anode puts it on 3.3 V and inverts everything. Multimeter in diode mode, black probe on the long leg — if the other three light in turn, it is common cathode.
-
-**Do not use the 220R-on-all-three that starter-kit lessons specify** — that is a 5 V figure. Red drops about 2.0 V while green and blue drop nearer 2.9 V, so at 3.3 V a uniform 220R gives red 5.9 mA, green 1.8 mA and blue 1.4 mA: red four times the others, and blue looking dead. Size them per colour: 220R red, and anything from 39R to 68R on green and blue. At 41R that is 5.9 / 9.8 / 7.3 mA, all inside the LED's 20 mA rating and the ESP32's comfortable 12 mA per pin. Red is the exception and keeps the 220R — it has a whole volt more headroom, so the same small resistor would put it past 30 mA. Only then trim `MOOD_GAIN_R/G/B` by eye, and expect to pull *green* down rather than push blue up, since the eye is far more sensitive to green.
-
-The usual 5 mm part (including the one in the Elegoo starter kit) is **common cathode**, with the pinout `RED · CATHODE · GREEN · BLUE` from the flat side and the cathode the longest lead — so the default `MOOD_COMMON_ANODE 0` is correct for it.
-
-The LEDC API changed in Arduino-ESP32 3.x (channels went away, the pin became the handle). The code compiles either side of that; this project is on 2.0.17.
-
 ## Severity and the presets
 
-Worth recording, because the obvious mapping is wrong: **the four bench presets are not one axis.** Distant storm → Rolling → Direct hit is a genuine severity ladder, with Rolling in the middle. Heat lightning is not on it — that is cloud-only sheet lightning with no channel strikes, a different *kind* of storm rather than a milder one. It belongs with the palette knob.
+Worth recording, because the obvious mapping is wrong: **the four bench presets are not one axis.** Distant storm → Rolling → Direct hit is a genuine severity ladder, with Rolling in the middle. Heat lightning is not on it — that is cloud-only sheet lightning with no channel strikes, a different *kind* of storm rather than a milder one. It belongs with the palette setting.
 
 So severity crossfades Distant ↔ Direct hit, and Heat lightning stays a separatechoice of its own.
 
@@ -321,7 +314,7 @@ pio run -t upload       # flash
 pio device monitor      # watch the log (and feed the live dashboard, if running)
 ```
 
-`platformio.ini` targets `esp32dev`. Re-exporting overwrites five of the seven source files, but never `config.h` or `controls.h` — so your pin choice, logging settings, palettes and knobs survive.
+`platformio.ini` targets `esp32dev`. Re-exporting overwrites five of the seven source files, but never `config.h` or `controls.h` — so your pin choice, logging settings, palettes and controls survive.
 
 ## Files
 
@@ -336,19 +329,15 @@ lightning-simulator/
 │   └── filter_dashboard.py    copies monitor output to the dashboard over UDP
 ├── dashboard/        live dashboard: Node service (no deps) + page
 │   ├── server.js     UDP in, Server-Sent Events out, serves the page
-│   ├── firmware.js   reads segments, palettes, cutoffs out of src/ and lib/
+│   ├── firmware.js   reads segments, palettes, speed and level steps out of src/
 │   ├── fake-bench.js pretend board for working without hardware
 │   └── public/       index.html, plus parse.js and state.js shared with the service
 ├── docs/
-│   ├── pot-wiring-card.html   bench reference; source for the published card
 │   ├── wiring-esp32.svg       full wiring diagram, DevKit V1 pinout
 │   └── wiring-esp32.py        regenerates the SVG
-├── lib/
-│   ├── PotReader/    averaged ADC reads (from Project 16)
-│   └── DetentSwitch/ raw reading -> knob position, plus calibrated profiles
 └── src/
     ├── config.h      YOURS: pins, logging, palettes — never regenerated
-    ├── controls.h    YOURS: potentiometer pins and mapping — never regenerated
+    ├── controls.h    YOURS: keyboard controls, chaos button — never regenerated
     ├── layout.h      generated: segment table, pixel coordinates
     ├── tuning.h      generated: animation parameters and palette
     ├── storm.h       generated: the engine, renders each frame into leds[]
