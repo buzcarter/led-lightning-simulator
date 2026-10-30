@@ -132,11 +132,19 @@ Both endpoints are resolved **once per frame**, not per pixel, so the per-pixel 
 
 | Palette | Hue | Hot hue | Sat | Hot sat | Trim | Reads as |
 |---|---|---|---|---|---|---|
-| storm | 160 | 160 | 200 | 40 | 255 | cold blue-white |
+| ice blue | 150 | 150 | 120 | 25 | 255 | light blue, nearly white at the peak |
+| periwinkle | 176 | 208 | 150 | 45 | 250 | blue afterglow from a pinkish core |
+| deep blue | 160 | 160 | 245 | 50 | 255 | saturated midnight blue |
+| sea foam | 120 | 128 | 170 | 30 | 215 | turquoise |
+| lavender | 200 | 200 | 115 | 25 | 245 | light purple |
+| deep purple | 190 | 190 | 250 | 60 | 240 | dark violet |
+
+The palette cycle runs through them in that order. The chaos button has its own pair, `CHAOS_PALETTES[]`, which it crossfades to and sways between while it rages, then fades back into the cycle:
+
+| Chaos palette | Hue | Hot hue | Sat | Hot sat | Trim | Reads as |
+|---|---|---|---|---|---|---|
 | tornado | 80 | 64 | 165 | 30 | 200 | sickly yellow-green — the dread is in the *low* saturation |
-| voldemort | 96 | 96 | 220 | 45 | 190 | vivid unnatural green — menace rather than dread |
-| halloween | 192 | 192 | 205 | 55 | 235 | purple |
-| red planet | 4 | 32 | 235 | 70 | 245 | deep red cooling from an amber core |
+| wisp | 110 | 112 | 215 | 40 | 195 | eerie blue-green |
 
 The bench runs FastLED's own `hsv2rgb_rainbow`, transcribed, so the swatches and the preview land on the same RGB the strip will.
 
@@ -198,10 +206,10 @@ Setting it to `0` — or passing `-DSTORM_LOG=0` in `build_flags`, since the def
 Output is a **dashboard, not a log**: one line carrying the current picture, rewritten when something a person would notice changes and refreshed on a slow timer when nothing does. There is no scrollback of every strike and every key press.
 
 ```
-palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: Bolt_Left        | fps:  98  mA: 3180
-palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: Bolt_Centre      | fps:  97  mA: 4020
-palette: tornado     speed: 60%         cloud: 50%         level: 40%        | strike: _                | fps:  99  mA:  240
-palette: voldemort   speed: 70%         cloud: 50%         level: 80%        | strike: Bolt_Centre +1   | fps:  96  mA: 5110
+palette: sea foam    speed: 60%         cloud: 50%         level: 40%        | strike: Bolt_Left        | fps:  98  mA: 3180
+palette: sea foam    speed: 60%         cloud: 50%         level: 40%        | strike: Bolt_Centre      | fps:  97  mA: 4020
+palette: sea foam    speed: 60%         cloud: 50%         level: 40%        | strike: _                | fps:  99  mA:  240
+palette: lavender    speed: 70%         cloud: 50%         level: 80%        | strike: Bolt_Centre +1   | fps:  96  mA: 5110
 ```
 
 `strike` names the **root channel** of the active strike, or `_` when the sky is quiet. A strike lights its whole tree, and forks never fire on their own, so a fork is never the answer here; overlapping strikes show as `name +N`.

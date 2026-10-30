@@ -558,11 +558,15 @@ const P = {
    but from red it gives PINK, since nothing gets hot by going pink. Fire runs
    red → orange → yellow → white, so red planet cools from an amber core. */
 const PALETTES = {
-  'Storm':      { hue:160, hotHue:160, sat:200, hotSat:40, trim:255 },
-  'Tornado':    { hue: 80, hotHue: 64, sat:165, hotSat:30, trim:200 },
-  'Voldemort':  { hue: 96, hotHue: 96, sat:220, hotSat:45, trim:190 },
-  'Halloween':  { hue:192, hotHue:192, sat:205, hotSat:55, trim:235 },
-  'Red planet': { hue:  4, hotHue: 32, sat:235, hotSat:70, trim:245 },
+  'Ice blue':    { hue:150, hotHue:150, sat:120, hotSat:25, trim:255 },
+  'Periwinkle':  { hue:176, hotHue:208, sat:150, hotSat:45, trim:250 },
+  'Deep blue':   { hue:160, hotHue:160, sat:245, hotSat:50, trim:255 },
+  'Sea foam':    { hue:120, hotHue:128, sat:170, hotSat:30, trim:215 },
+  'Lavender':    { hue:200, hotHue:200, sat:115, hotSat:25, trim:245 },
+  'Deep purple': { hue:190, hotHue:190, sat:250, hotSat:60, trim:240 },
+  // the chaos button's pair (CHAOS_PALETTES[] in config.h)
+  'Tornado':     { hue: 80, hotHue: 64, sat:165, hotSat:30, trim:200 },
+  'Wisp':        { hue:110, hotHue:112, sat:215, hotSat:40, trim:195 },
 };
 
 const PRESETS = {
@@ -1589,7 +1593,11 @@ static void paletteCycle(uint32_t realNow) {
 
    The envelope runs in real milliseconds while the strikes it schedules run
    on the storm clock — so a tap always lasts about four and a half seconds
-   no matter what the speed is. */
+   no matter what the speed is.
+
+   The colour follows the same envelope: the sky crossfades to CHAOS_PALETTES[]
+   in config.h, sways between them every CHAOS_SWAY_MS, and fades back to
+   the cycle's palette as the envelope eases off. */
 #ifndef CHAOS_ENABLE
   #define CHAOS_ENABLE 1
 #endif
@@ -1600,6 +1608,7 @@ static void paletteCycle(uint32_t realNow) {
 #define CHAOS_STAGGER_MS   90       // between channels in the opening volley
 #define CHAOS_GAP_MIN      90       // scheduler gaps while held
 #define CHAOS_GAP_MAX      260
+#define CHAOS_SWAY_MS      1800     // one round trip between the chaos palettes
 
 #if CHAOS_ENABLE
 
@@ -1627,6 +1636,26 @@ void chaosFire(uint32_t realNow, uint32_t stormNow) {
 void chaosCancel() {
   chaosAt = 0; g_chaos = 0;
   g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
+  controlsApply();                                   // the cycle's colours and trim
+}
+
+static inline CRGB rainbowRGB(uint8_t hue, uint8_t sat) {
+  CRGB c; hsv2rgb_rainbow(CHSV(hue, sat, 255), c); return c;
+}
+
+/* Overrides the frame's palette endpoints. sway picks the mix of the chaos
+   palettes (0 = the first), amt how far the cycle's palette has given way
+   to it. Trim is blended too, so the greens stay pulled back. */
+static void chaosColour(uint8_t sway, uint8_t amt) {
+  const Palette &a = CHAOS_PALETTES[0];
+  const Palette &b = CHAOS_PALETTES[NUM_CHAOS_PALETTES - 1];
+  const Palette &p = PALETTES[g_palette];
+  CRGB cool = blend(rainbowRGB(a.hue, a.sat),       rainbowRGB(b.hue, b.sat),       sway);
+  CRGB hot  = blend(rainbowRGB(a.hotHue, a.hotSat), rainbowRGB(b.hotHue, b.hotSat), sway);
+  coolC = blend(rainbowRGB(p.hue, p.sat),       cool, amt);
+  hotC  = blend(rainbowRGB(p.hotHue, p.hotSat), hot,  amt);
+  uint8_t trim = (uint8_t)chaosLerp16(a.trim, b.trim, sway);
+  g_trim = (uint8_t)chaosLerp16(p.trim, trim, amt);
 }
 
 /* Starts from what the pin reads now, so a button that is held, or wired so
@@ -1664,6 +1693,10 @@ void chaosPoll(uint32_t realNow, uint32_t stormNow) {
   g_gapMin    = chaosLerp16(GAP_MIN, CHAOS_GAP_MIN, amt);
   g_gapMax    = chaosLerp16(GAP_MAX, CHAOS_GAP_MAX, amt);
   g_dblChance = (uint8_t)chaosLerp16(DBL_CHANCE, 255, amt);
+
+  // starts on the first chaos palette: sin8 is at its floor a quarter turn back
+  uint8_t sway = sin8((uint8_t)(e * 256 / CHAOS_SWAY_MS) + 192);
+  chaosColour(sway, amt);
 }
 
 #else
@@ -1849,16 +1882,30 @@ const FILE_CONFIG_H = `/* ──────────────────
    roughly twice as bright as blue at 170. Pull greens back. */
 struct Palette { const char *name; uint8_t hue, hotHue, sat, hotSat, trim; };
 
+/* The normal cycle, in the order it runs: blues through sea foam into
+   purples, then round again. Light means LOW saturation, deep means high. */
 __attribute__((unused))
 const Palette PALETTES[] = {
   //  name           hue  hotHue  sat  hotSat  trim
-  { "storm",         160,   160,  200,    40,   255 },  // cold blue-white, where this started
-  { "tornado",        80,    64,  165,    30,   200 },  // sickly yellow-green; dread is in the LOW saturation
-  { "voldemort",      96,    96,  220,    45,   190 },  // vivid unnatural green — menace rather than dread
-  { "halloween",     192,   192,  205,    55,   235 },  // purple
-  { "red planet",      4,    32,  235,    70,   245 },  // deep red cooling from an amber core, not a pink one
+  { "ice blue",      150,   150,  120,    25,   255 },  // light blue, nearly white at the peak
+  { "periwinkle",    176,   208,  150,    45,   250 },  // blue afterglow from a pinkish core
+  { "deep blue",     160,   160,  245,    50,   255 },  // saturated midnight blue
+  { "sea foam",      120,   128,  170,    30,   215 },  // turquoise; pulled back, it leans green
+  { "lavender",      200,   200,  115,    25,   245 },  // light purple
+  { "deep purple",   190,   190,  250,    60,   240 },  // dark violet
 };
 #define NUM_PALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
+
+/* What the chaos button turns the sky while it rages: the colour sways
+   between these two, then fades back into the cycle as the storm moves off.
+   Never part of the cycle and not pickable from the keys. */
+__attribute__((unused))
+const Palette CHAOS_PALETTES[] = {
+  //  name           hue  hotHue  sat  hotSat  trim
+  { "tornado",        80,    64,  165,    30,   200 },  // sickly yellow-green; dread is in the LOW saturation
+  { "wisp",          110,   112,  215,    40,   195 },  // eerie blue-green
+};
+#define NUM_CHAOS_PALETTES (sizeof(CHAOS_PALETTES) / sizeof(CHAOS_PALETTES[0]))
 `;
 const FILE_STORM_H = `/* Storm engine, generated by Bolt Bench — overwritten on export. */
 #pragma once
