@@ -42,6 +42,38 @@ void controlsApply() {
   g_bright = (uint8_t)(LEVEL_FLOOR + ((uint32_t)g_level * span / (LEVEL_STEPS - 1)));
 }
 
+/* What the board starts on, as the step numbers the keys print (speed 7/10).
+   Speed 7 is 1.32x, cloud 6 is 1.00x, level 9 is 90%. */
+#define START_PALETTE  1
+#define START_SPEED    7
+#define START_CLOUD    6
+#define START_LEVEL    9
+
+/* The palette moves on by itself every PALETTE_CYCLE_MS, round all of
+   PALETTES[]. Changing it by hand restarts the wait, so a palette you pick
+   gets its full turn. 0 turns the cycle off. */
+#define PALETTE_CYCLE_MS  22000
+
+static uint32_t paletteAt = 0;      // millis the current palette came up
+
+void controlsStart() {
+  g_palette = START_PALETTE - 1;
+  g_speed   = START_SPEED - 1;
+  g_cloud   = START_CLOUD - 1;
+  g_level   = START_LEVEL - 1;
+  controlsApply();
+  paletteAt = millis();
+}
+
+static void paletteCycle(uint32_t realNow) {
+  if (!PALETTE_CYCLE_MS || realNow - paletteAt < PALETTE_CYCLE_MS) return;
+  paletteAt = realNow;
+  g_palette = (g_palette + 1) % NUM_PALETTES;
+  controlsApply();
+  LOG("[cycle] palette %u/%u %s\n", (unsigned)(g_palette + 1), (unsigned)NUM_PALETTES,
+      PALETTES[g_palette].name);
+}
+
 /* ── chaos button ───────────────────────────────────────────── */
 /* A momentary button to GND on CHAOS_PIN, using the internal pull-up, so it
    is two wires and no resistor. Do NOT put it on GPIO34-39: those pins have
@@ -70,6 +102,8 @@ void controlsApply() {
 #if CHAOS_ENABLE
 
 static uint32_t chaosAt = 0;        // millis of the last tap; 0 = idle
+static uint8_t  chaosRaw = HIGH, chaosStable = HIGH;   // debounce state; LOW = pressed
+static uint32_t chaosChangedAt = 0;
 
 static inline uint16_t chaosLerp16(uint16_t base, uint16_t target, uint8_t amt) {
   return (uint16_t)((int32_t)base + ((int32_t)target - (int32_t)base) * amt / 255);
@@ -93,20 +127,25 @@ void chaosCancel() {
   g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
 }
 
+/* Starts from what the pin reads now, so a button that is held, or wired so
+   it reads pressed all the time, cannot fire chaos at boot. Chaos is the
+   biggest draw there is, and a short on this pin would otherwise fire it on
+   every power-up. */
 void chaosBegin() {
   pinMode(CHAOS_PIN, INPUT_PULLUP);
+  delay(5);                                          // let the pull-up settle
+  chaosRaw = chaosStable = digitalRead(CHAOS_PIN);
   LOG("[storm] chaos button GPIO%u to GND\n", (unsigned)CHAOS_PIN);
+  if (chaosStable == LOW)
+    LOG("[storm] chaos button reads PRESSED at boot: check its wiring; ignored until released\n");
 }
 
 void chaosPoll(uint32_t realNow, uint32_t stormNow) {
-  static uint8_t  lastRaw = HIGH, stable = HIGH;
-  static uint32_t changedAt = 0;
-
   uint8_t raw = digitalRead(CHAOS_PIN);
-  if (raw != lastRaw) { lastRaw = raw; changedAt = realNow; }
-  if (realNow - changedAt >= CHAOS_DEBOUNCE_MS && stable != lastRaw) {
-    stable = lastRaw;
-    if (stable == LOW) chaosFire(realNow, stormNow);   // active low
+  if (raw != chaosRaw) { chaosRaw = raw; chaosChangedAt = realNow; }
+  if (realNow - chaosChangedAt >= CHAOS_DEBOUNCE_MS && chaosStable != chaosRaw) {
+    chaosStable = chaosRaw;
+    if (chaosStable == LOW) chaosFire(realNow, stormNow);   // active low: fires on the press
   }
 
   if (!chaosAt) return;
@@ -180,7 +219,7 @@ static void logSetting(Setting s) {
 
 static void keyStep(int8_t dir) {
   switch (keySetting) {
-    case SET_PALETTE: g_palette = stepWrap(g_palette, dir, NUM_PALETTES); break;
+    case SET_PALETTE: g_palette = stepWrap(g_palette, dir, NUM_PALETTES); paletteAt = millis(); break;
     case SET_SPEED:   g_speed   = stepWrap(g_speed,   dir, SPEED_STEPS);  break;
     case SET_CLOUD:   g_cloud   = stepWrap(g_cloud,   dir, SPEED_STEPS);  break;
     case SET_LEVEL:   g_level   = stepWrap(g_level,   dir, LEVEL_STEPS);  break;
@@ -195,7 +234,7 @@ void controlsBegin() {
       (unsigned)(NUM_SEGMENTS - 1));
 }
 
-void controlsPoll() {
+static void keysPoll() {
   while (Serial.available()) {
     int c = tolower(Serial.read());
     switch (c) {
@@ -220,5 +259,11 @@ void controlsPoll() {
 
 #else
 inline void controlsBegin() {}
-inline void controlsPoll() {}
+static inline void keysPoll() {}
 #endif
+
+/* Once a frame: keys from the monitor, then the palette cycle. */
+void controlsUpdate(uint32_t realNow) {
+  keysPoll();
+  paletteCycle(realNow);
+}

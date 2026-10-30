@@ -268,7 +268,9 @@ There are no knobs. Palette, speed, cloud speed and level are set from the keybo
 | `h` | hold mode on/off: one segment lit steady, the storm paused |
 | `0`–`6` | while holding, the segment to light, in the order the boot banner lists them (0 is the cloud body) |
 
-Each change prints a `[keys]` line with the new value, and the dashboard line follows. The keys need `STORM_LOG 1`, which is what opens the serial port; without it the settings stay at their boot values (palette 1, both speeds 1.00×, level 100%).
+Each change prints a `[keys]` line with the new value, and the dashboard line follows. The keys need `STORM_LOG 1`, which is what opens the serial port; without it the settings stay at their start values.
+
+The board starts on speed 7 (70%, 1.32×), cloud 6 (60%, 1.00×) and level 9 (90%), and **cycles the palettes on its own**, a new one every 22 seconds. Changing the palette by hand restarts the 22 seconds, so a palette you pick gets its full turn. Both are set at the top of `controls.h`: `START_PALETTE`, `START_SPEED`, `START_CLOUD`, `START_LEVEL` and `PALETTE_CYCLE_MS` (0 turns the cycle off). Each change prints a `[cycle]` line.
 
 **Palette carries a whole look per step, not a hue.** Rotating hue alone leaves `SAT` wherever the export left it, and at low saturation every hue is the same near-white. Each step sets hue, saturation, peak saturation and trim together from `PALETTES[]` in `config.h`; there are as many steps as rows there.
 

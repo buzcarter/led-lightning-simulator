@@ -914,7 +914,7 @@ const logEl = $('log');
 function logRow(entry) {
   const d = document.createElement('div');
   d.className = entry.type === 'status' ? 'status' : entry.type === 'dropped' ? 'dropped'
-              : /^\[(storm|keys|hold)\]/.test(entry.line) || entry.type === 'boot' ? 'boot' : '';
+              : /^\[(storm|keys|hold|cycle)\]/.test(entry.line) || entry.type === 'boot' ? 'boot' : '';
   const time = document.createElement('time');
   time.textContent = clock(entry.t);
   d.append(time, entry.line);

@@ -443,10 +443,27 @@ void renderHold() {
 }
 
 /* ── boot banner ────────────────────────────────────────────── */
+/* Why the board last restarted. BROWNOUT means the 5 V rail sagged: almost
+   always a strike drawing more than the supply gives (see LED_MAX_MA). */
+static const char *resetReason() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:  return "power on";
+    case ESP_RST_EXT:      return "reset pin";
+    case ESP_RST_SW:       return "software";
+    case ESP_RST_PANIC:    return "CRASH";
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:      return "WATCHDOG";
+    case ESP_RST_BROWNOUT: return "BROWNOUT";
+    default:               return "other";
+  }
+}
+
 void logBoot() {
 #if STORM_LOG
   LOG("\n[storm] StormCloud ready — %u px, %u segments, pin %u, master %u\n",
       (unsigned)NUM_LEDS, (unsigned)NUM_SEGMENTS, (unsigned)LED_PIN, (unsigned)MASTER);
+  LOG("[storm] last reset: %s\n", resetReason());
   LOG("[storm] %-16s %5s %5s %6s  %s\n", "segment", "start", "len", "role", "attachment");
   for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
     Segment sg; memcpy_P(&sg, &SEGMENTS[i], sizeof(Segment));

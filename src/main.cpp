@@ -17,7 +17,7 @@ void setup() {
   while (!Serial && millis() - waited < 1500) { }   // but never hang without a host
 #endif
   stripBegin();
-  controlsApply();                      // palette, speed and level at their defaults
+  controlsStart();                      // palette, speeds and level at their start values
   random16_set_seed(0x1337);            // same seed the bench previewed
   logBoot();
   controlsBegin();
@@ -25,7 +25,7 @@ void setup() {
 }
 
 void loop() {
-  controlsPoll();
+  controlsUpdate(millis());
 
   frameNo++;
   fill_solid(leds, NUM_LEDS, CRGB::Black);
