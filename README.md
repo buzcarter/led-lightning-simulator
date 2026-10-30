@@ -138,6 +138,7 @@ Both endpoints are resolved **once per frame**, not per pixel, so the per-pixel 
 | sea foam | 120 | 128 | 170 | 30 | 215 | turquoise |
 | lavender | 200 | 200 | 115 | 25 | 245 | light purple |
 | deep purple | 190 | 190 | 250 | 60 | 240 | dark violet |
+| plum | 235 | 230 | 136 | 55 | 210 | deep plum burgundy, #651B30 — reddish purple |
 
 The palette cycle runs through them in that order. The chaos button has its own pair, `CHAOS_PALETTES[]`, which it crossfades to and sways between while it rages, then fades back into the cycle:
 

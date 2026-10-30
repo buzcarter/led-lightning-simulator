@@ -88,6 +88,7 @@ const Palette PALETTES[] = {
   { "sea foam",      120,   128,  170,    30,   215 },  // turquoise; pulled back, it leans green
   { "lavender",      200,   200,  115,    25,   245 },  // light purple
   { "deep purple",   190,   190,  250,    60,   240 },  // dark violet
+  { "plum",          235,   230,  136,    55,   210 },  // deep plum burgundy, #651B30; trimmed to stay dark
 };
 #define NUM_PALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
 
