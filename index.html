@@ -375,7 +375,7 @@ textarea.paste{
     <details>
       <summary>Export <span class="note">Arduino / ESP32</span></summary>
       <div class="body">
-        <p class="blurb">A direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same <code>hsv2rgb_rainbow</code>. Drop these in <code>src/</code>. <code>config.h</code> and <code>controls.h</code> are yours to keep: the other five are overwritten every export.</p>
+        <p class="blurb">A direct transcription of what you are watching — same 8-bit math, same <code>random16()</code> LCG, same <code>hsv2rgb_rainbow</code>. Drop these in <code>src/</code>. <code>config.h</code>, <code>controls.h</code> and <code>sound.h</code> are yours to keep: the other five are overwritten every export.</p>
         <div class="tabs" id="tabs"></div>
         <pre class="code" id="codeOut"></pre>
         <div class="exp-acts">
@@ -1510,11 +1510,13 @@ const FILE_CONTROLS_H = `/* ─────────────────�
 
    Two inputs: the chaos button on the board, and keys typed into the
    serial monitor on a tethered computer. Palette, speed, cloud speed and
-   level are set from the keyboard; there are no knobs.
+   level are set from the keyboard; there are no knobs. The thunder in
+   sound.h is driven from here too.
    ───────────────────────────────────────────────────────────── */
 #pragma once
 #include <Arduino.h>
 #include "storm.h"
+#include "sound.h"
 
 /* ── settings ───────────────────────────────────────────────── */
 /* Speed steps, 8.8 fixed point, one per step. Geometric, because equal
@@ -1631,6 +1633,7 @@ void chaosFire(uint32_t realNow, uint32_t stormNow) {
     k++;
   }
   LOG("[storm] CHAOS -- %u channels\\n", (unsigned)k);
+  soundChaos(realNow);
 }
 
 /* Back to the settings at once, wherever the envelope was. */
@@ -1714,6 +1717,7 @@ inline void chaosPoll(uint32_t, uint32_t) {}
              (= and _ work too, so shift is optional)
      h       hold mode on/off: one segment lit steady, the storm paused
      0-9     while holding, the segment to light, in SEGMENTS[] order
+     t       a thunder file now, for testing the sound
 
    Each change prints the new value, and the dashboard line follows. Needs
    STORM_LOG, which is what opens the serial port; without it the settings
@@ -1766,7 +1770,8 @@ static void keyStep(int8_t dir) {
 }
 
 void controlsBegin() {
-  LOG("[keys]  p s c l pick palette, speed, cloud or level; + - step it; h hold, then 0-%u\\n",
+  soundBegin();
+  LOG("[keys]  p s c l pick palette, speed, cloud or level; + - step it; h hold, then 0-%u; t thunder\\n",
       (unsigned)(NUM_SEGMENTS - 1));
 }
 
@@ -1780,6 +1785,7 @@ static void keysPoll() {
       case 'l': keySetting = SET_LEVEL;   break;
       case '+': case '=': keyStep(+1); continue;
       case '-': case '_': keyStep(-1); continue;
+      case 't': soundTest(); continue;
       case 'h':
         if (!g_hold) chaosCancel();          // so hold shows the level setting's brightness
         holdSet(!g_hold);
@@ -1794,15 +1800,201 @@ static void keysPoll() {
 }
 
 #else
-inline void controlsBegin() {}
+inline void controlsBegin() { soundBegin(); }
 static inline void keysPoll() {}
 #endif
 
-/* Once a frame: keys from the monitor, then the palette cycle. */
+/* Once a frame: keys from the monitor, the palette cycle, then the sound. */
 void controlsUpdate(uint32_t realNow) {
   keysPoll();
   paletteCycle(realNow);
+  soundUpdate(realNow);
 }
+`;
+const FILE_SOUND_H = `/* ─────────────────────────────────────────────────────────────
+   sound.h — YOURS. Bolt Bench never overwrites this file.
+
+   Thunder from a DFPlayer Mini. It plays one file at a time, so the
+   sounds take turns rather than layering: the cloud's rumble plays until
+   a strike's thunder interrupts it, and comes back when the thunder ends.
+
+   The microSD card, FAT32, one folder per kind of sound:
+
+     /01/001.mp3 ...   cloud rumble, the steady state
+     /02/001.mp3 ...   thunder, one per strike
+     /03/001.mp3 ...   chaos
+
+   Each name starts with three digits, from 001 with no gaps; anything
+   after them is ignored, so "001 close crack.mp3" is fine. Set the counts
+   below to match. Each play picks one at random from its folder. audio/
+   in the project holds the card's files, laid out the same way.
+
+   Wiring: DFPlayer VCC to 5 V and GND to the ESP32's ground. SOUND_TX_PIN
+   to the DFPlayer's RX through a 1 kΩ resistor, which keeps the hiss
+   down; the DFPlayer's TX to SOUND_RX_PIN. That return wire is how the
+   board hears a file finish, so without it the rumble plays once and
+   stops. A speaker of 3 W or less straight across SPK1 and SPK2, and a
+   100-470 µF capacitor across VCC and GND at the module: the strip's
+   current spikes otherwise come through the speaker as clicks.
+   ───────────────────────────────────────────────────────────── */
+#pragma once
+#include <Arduino.h>
+#include "storm.h"
+
+/* 0 leaves the DFPlayer out entirely, library and all. */
+#ifndef SOUND_ENABLE
+  #define SOUND_ENABLE 1
+#endif
+#if SOUND_ENABLE
+  #include <DFRobotDFPlayerMini.h>
+#endif
+#define SOUND_TX_PIN      GPIO_NUM_26   // to the DFPlayer's RX, through 1 kΩ
+#define SOUND_RX_PIN      GPIO_NUM_25   // from the DFPlayer's TX
+
+#define SOUND_CLOUD_FILES    1          // how many files in /01, /02 and /03
+#define SOUND_THUNDER_FILES  6
+#define SOUND_CHAOS_FILES    1
+
+/* Volume at the top level step, 0..30. It follows the level setting down,
+   so dimming the storm quiets it too. */
+#define SOUND_VOLUME      24
+
+/* Light arrives at once, sound does not: each strike's thunder waits a
+   random THUNDER_DELAY, which reads as a storm at varying distances and
+   hides the module's own start-up lag. A thunder file is longer than the
+   gap between strikes, so a new one only cuts in once the last has played
+   THUNDER_HOLD_MS; strikes before that are too far off to hear. */
+#define THUNDER_DELAY_MIN   300
+#define THUNDER_DELAY_MAX   2000
+#define THUNDER_HOLD_MS     4000
+
+#define SOUND_BOOT_MS     1500          // the module reading its card after power on
+#define SOUND_CMD_GAP_MS  60            // the module drops commands sent closer than this
+#define SOUND_ECHO_MS     400           // clones report a finish twice; ignore the echo
+
+enum SoundFolder : uint8_t { SND_CLOUD = 1, SND_THUNDER = 2, SND_CHAOS = 3 };
+
+#if SOUND_ENABLE
+
+static DFRobotDFPlayerMini dfp;
+static SoundFolder soundNow = SND_CLOUD;   // what is playing, or about to
+static bool     soundStarted = false;      // the first rumble has gone out
+static uint32_t soundAt = 0;               // millis of the last play
+static uint32_t soundCmdAt = 0;            // millis of the last command of any kind
+static uint32_t thunderAt = 0;             // a strike's thunder, due then; 0 = none
+static uint8_t  soundVol = 255;            // what the module was last told
+static uint8_t  soundLast[4] = {0};        // the last file per folder, to avoid repeats
+static bool     soundDone = false;         // the module reported a file finishing
+
+/* Arduino's random(), not random16(): the storm's draws must stay the
+   bench's, so the same seed replays the same storm. */
+static uint8_t pickFile(SoundFolder f, uint8_t n) {
+  if (n <= 1) return 1;
+  uint8_t k = (uint8_t)random(1, n + 1);
+  if (k == soundLast[f]) k = k % n + 1;    // never the same file twice running
+  return k;
+}
+
+static void soundPlay(SoundFolder f, uint32_t realNow) {
+  uint8_t n = f == SND_CLOUD ? SOUND_CLOUD_FILES
+            : f == SND_THUNDER ? SOUND_THUNDER_FILES : SOUND_CHAOS_FILES;
+  if (!n) return;
+  uint8_t k = pickFile(f, n);
+  dfp.playFolder(f, k);
+  soundLast[f] = k;
+  soundNow = f; soundAt = soundCmdAt = realNow; soundDone = false;
+  LOG("[sound] %s %02u/%03u.mp3\\n",
+      f == SND_CLOUD ? "rumble" : f == SND_THUNDER ? "thunder" : "chaos", (unsigned)f, (unsigned)k);
+}
+
+/* Called by the scheduler for each strike it fires. */
+static void soundStrike() {
+  if (soundNow == SND_CHAOS || thunderAt) return;
+  uint32_t now = millis();
+  if (soundNow == SND_THUNDER && now - soundAt < THUNDER_HOLD_MS) return;
+  thunderAt = now + random(THUNDER_DELAY_MIN, THUNDER_DELAY_MAX + 1);
+  if (!thunderAt) thunderAt = 1;
+}
+
+/* Chaos cuts straight in, with no distance delay: it is right overhead. */
+void soundChaos(uint32_t realNow) {
+  thunderAt = 0;
+  soundPlay(SND_CHAOS, realNow);
+}
+
+/* Press t in the monitor: a thunder file now, no delay, for testing the
+   wiring and the card without waiting on the storm. */
+void soundTest() {
+  thunderAt = 0;
+  soundPlay(SND_THUNDER, millis());
+}
+
+/* Everything the module says, in words. Its TX back to SOUND_RX_PIN is the
+   only way to see it, so silence here with the module powered means that
+   wire, or the module is not running at all. */
+static void soundReport(uint8_t type, uint16_t value) {
+  switch (type) {
+    case DFPlayerCardOnline:   LOG("[sound] card ready\\n"); break;
+    case DFPlayerCardInserted: LOG("[sound] card inserted\\n"); break;
+    case DFPlayerCardRemoved:  LOG("[sound] card REMOVED\\n"); break;
+    case DFPlayerPlayFinished: LOG("[sound] finished file %u\\n", (unsigned)value); break;
+    case DFPlayerError: {
+      const char *why = value == Busy             ? "busy: no card, or it cannot be read"
+                      : value == Sleeping         ? "sleeping"
+                      : value == SerialWrongStack ? "garbled command: check the 1 kΩ and the RX wire"
+                      : value == CheckSumNotMatch ? "checksum: noise on the RX wire"
+                      : value == FileIndexOut     ? "no such file: a count in sound.h is too high"
+                      : value == FileMismatch     ? "file not found: check the folder and file names"
+                      : "unknown";
+      LOG("[sound] ERROR %u, %s\\n", (unsigned)value, why);
+      break;
+    }
+    default: LOG("[sound] message %u, %u\\n", (unsigned)type, (unsigned)value); break;
+  }
+}
+
+void soundBegin() {
+  Serial2.begin(9600, SERIAL_8N1, SOUND_RX_PIN, SOUND_TX_PIN);
+  dfp.begin(Serial2, false, false);    // no ACK and no reset, so nothing here blocks a frame
+  soundCmdAt = millis();
+  g_onStrike = soundStrike;
+  LOG("[sound] DFPlayer on GPIO%u (TX) / GPIO%u (RX)\\n", (unsigned)SOUND_TX_PIN, (unsigned)SOUND_RX_PIN);
+}
+
+/* Once a frame. At most one command goes out per call, spaced by
+   SOUND_CMD_GAP_MS, in order of what would be noticed most. */
+void soundUpdate(uint32_t realNow) {
+  while (dfp.available()) {
+    uint8_t type = dfp.readType();
+    uint16_t value = dfp.read();
+    if (type == DFPlayerPlayFinished && realNow - soundAt <= SOUND_ECHO_MS) continue;
+    soundReport(type, value);
+    if (type == DFPlayerPlayFinished) soundDone = true;
+    // a module slower to read its card than SOUND_BOOT_MS dropped the first
+    // rumble; it says when the card is ready, so start again from there
+    if (type == DFPlayerCardOnline || type == DFPlayerCardInserted) soundStarted = false;
+  }
+
+  if (realNow < SOUND_BOOT_MS || realNow - soundCmdAt < SOUND_CMD_GAP_MS) return;
+
+  uint8_t vol = (uint8_t)((uint16_t)SOUND_VOLUME * (g_level + 1) / LEVEL_STEPS);
+  if (vol != soundVol) { dfp.volume(vol); soundVol = vol; soundCmdAt = realNow; return; }
+
+  if (thunderAt && (int32_t)(realNow - thunderAt) >= 0) {
+    thunderAt = 0;
+    soundPlay(SND_THUNDER, realNow);
+  } else if (!soundStarted || soundDone) {
+    soundStarted = true;
+    soundPlay(SND_CLOUD, realNow);       // the rumble again, a fresh pick each time
+  }
+}
+
+#else
+inline void soundTest() {}
+inline void soundBegin() {}
+inline void soundUpdate(uint32_t) {}
+inline void soundChaos(uint32_t) {}
+#endif
 `;
 const FILE_CONFIG_H = `/* ─────────────────────────────────────────────────────────────
    config.h — YOURS. Bolt Bench never overwrites this file.
@@ -2034,6 +2226,10 @@ struct Strike {
 };
 Strike strikes[MAX_STRIKES];
 uint32_t nextStrikeAt = 700;
+
+/* Told of each strike the scheduler fires, for anything that follows the
+   storm without being part of it: sound.h sets it to start the thunder. */
+void (*g_onStrike)() = nullptr;
 uint16_t frameNo = 0;
 
 void makeStrike(uint8_t slot, uint8_t segIdx, uint32_t t0) {
@@ -2307,6 +2503,7 @@ void scheduleStrikes(uint32_t now) {
   if (n) {
     uint8_t pick = rndR(0, n);
     trigger(bolts[pick], now);
+    if (g_onStrike) g_onStrike();
     if (random8() < g_dblChance && n > 1) {          // a second, different channel
       uint8_t other = rndR(0, n);
       if (other == pick) other = (other + 1) % n;
@@ -2612,6 +2809,7 @@ function buildFiles(){
   return {
     'config.h':    FILE_CONFIG_H,
     'controls.h':  FILE_CONTROLS_H,
+    'sound.h':     FILE_SOUND_H,
     'layout.h':    fileLayoutH(),
     'tuning.h':    fileTuningH(),
     'storm.h':     FILE_STORM_H,
@@ -2629,7 +2827,7 @@ function buildTabs(){
   tabsEl.textContent = '';
   for (const name of Object.keys(buildFiles())){
     const b = el('button', 'btn' + (name === exportTab ? ' on' : ''), name);
-    if (name === 'config.h' || name === 'controls.h')
+    if (name === 'config.h' || name === 'controls.h' || name === 'sound.h')
       b.title = 'Starter only — the bench never overwrites this file';
     b.addEventListener('click', () => { exportTab = name; buildTabs(); buildExport(); });
     tabsEl.append(b);

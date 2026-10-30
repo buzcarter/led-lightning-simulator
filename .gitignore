@@ -30,3 +30,8 @@ build/
 
 # Python (the PlatformIO monitor filter)
 __pycache__/
+
+# Sound files for the DFPlayer's microSD card: too big for git, and often
+# not ours to redistribute. The folder layout is in audio/README.md.
+audio/*
+!audio/README.md
