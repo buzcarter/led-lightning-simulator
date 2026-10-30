@@ -77,13 +77,28 @@
    roughly twice as bright as blue at 170. Pull greens back. */
 struct Palette { const char *name; uint8_t hue, hotHue, sat, hotSat, trim; };
 
+/* The normal cycle, in the order it runs: blues through sea foam into
+   purples, then round again. Light means LOW saturation, deep means high. */
 __attribute__((unused))
 const Palette PALETTES[] = {
   //  name           hue  hotHue  sat  hotSat  trim
-  { "storm",         160,   160,  200,    40,   255 },  // cold blue-white, where this started
-  { "tornado",        80,    64,  165,    30,   200 },  // sickly yellow-green; dread is in the LOW saturation
-  { "voldemort",      96,    96,  220,    45,   190 },  // vivid unnatural green — menace rather than dread
-  { "halloween",     192,   192,  205,    55,   235 },  // purple
-  { "red planet",      4,    32,  235,    70,   245 },  // deep red cooling from an amber core, not a pink one
+  { "ice blue",      150,   150,  120,    25,   255 },  // light blue, nearly white at the peak
+  { "periwinkle",    176,   208,  150,    45,   250 },  // blue afterglow from a pinkish core
+  { "deep blue",     160,   160,  245,    50,   255 },  // saturated midnight blue
+  { "sea foam",      120,   128,  170,    30,   215 },  // turquoise; pulled back, it leans green
+  { "lavender",      200,   200,  115,    25,   245 },  // light purple
+  { "deep purple",   190,   190,  250,    60,   240 },  // dark violet
+  { "plum",          235,   230,  136,    55,   210 },  // deep plum burgundy, #651B30; trimmed to stay dark
 };
 #define NUM_PALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
+
+/* What the chaos button turns the sky while it rages: the colour sways
+   between these two, then fades back into the cycle as the storm moves off.
+   Never part of the cycle and not pickable from the keys. */
+__attribute__((unused))
+const Palette CHAOS_PALETTES[] = {
+  //  name           hue  hotHue  sat  hotSat  trim
+  { "tornado",        80,    64,  165,    30,   200 },  // sickly yellow-green; dread is in the LOW saturation
+  { "wisp",          110,   112,  215,    40,   195 },  // eerie blue-green
+};
+#define NUM_CHAOS_PALETTES (sizeof(CHAOS_PALETTES) / sizeof(CHAOS_PALETTES[0]))

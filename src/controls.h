@@ -87,7 +87,11 @@ static void paletteCycle(uint32_t realNow) {
 
    The envelope runs in real milliseconds while the strikes it schedules run
    on the storm clock — so a tap always lasts about four and a half seconds
-   no matter what the speed is. */
+   no matter what the speed is.
+
+   The colour follows the same envelope: the sky crossfades to CHAOS_PALETTES[]
+   in config.h, sways between them every CHAOS_SWAY_MS, and fades back to
+   the cycle's palette as the envelope eases off. */
 #ifndef CHAOS_ENABLE
   #define CHAOS_ENABLE 1
 #endif
@@ -98,6 +102,7 @@ static void paletteCycle(uint32_t realNow) {
 #define CHAOS_STAGGER_MS   90       // between channels in the opening volley
 #define CHAOS_GAP_MIN      90       // scheduler gaps while held
 #define CHAOS_GAP_MAX      260
+#define CHAOS_SWAY_MS      1800     // one round trip between the chaos palettes
 
 #if CHAOS_ENABLE
 
@@ -125,6 +130,26 @@ void chaosFire(uint32_t realNow, uint32_t stormNow) {
 void chaosCancel() {
   chaosAt = 0; g_chaos = 0;
   g_gapMin = GAP_MIN; g_gapMax = GAP_MAX; g_dblChance = DBL_CHANCE;
+  controlsApply();                                   // the cycle's colours and trim
+}
+
+static inline CRGB rainbowRGB(uint8_t hue, uint8_t sat) {
+  CRGB c; hsv2rgb_rainbow(CHSV(hue, sat, 255), c); return c;
+}
+
+/* Overrides the frame's palette endpoints. sway picks the mix of the chaos
+   palettes (0 = the first), amt how far the cycle's palette has given way
+   to it. Trim is blended too, so the greens stay pulled back. */
+static void chaosColour(uint8_t sway, uint8_t amt) {
+  const Palette &a = CHAOS_PALETTES[0];
+  const Palette &b = CHAOS_PALETTES[NUM_CHAOS_PALETTES - 1];
+  const Palette &p = PALETTES[g_palette];
+  CRGB cool = blend(rainbowRGB(a.hue, a.sat),       rainbowRGB(b.hue, b.sat),       sway);
+  CRGB hot  = blend(rainbowRGB(a.hotHue, a.hotSat), rainbowRGB(b.hotHue, b.hotSat), sway);
+  coolC = blend(rainbowRGB(p.hue, p.sat),       cool, amt);
+  hotC  = blend(rainbowRGB(p.hotHue, p.hotSat), hot,  amt);
+  uint8_t trim = (uint8_t)chaosLerp16(a.trim, b.trim, sway);
+  g_trim = (uint8_t)chaosLerp16(p.trim, trim, amt);
 }
 
 /* Starts from what the pin reads now, so a button that is held, or wired so
@@ -162,6 +187,10 @@ void chaosPoll(uint32_t realNow, uint32_t stormNow) {
   g_gapMin    = chaosLerp16(GAP_MIN, CHAOS_GAP_MIN, amt);
   g_gapMax    = chaosLerp16(GAP_MAX, CHAOS_GAP_MAX, amt);
   g_dblChance = (uint8_t)chaosLerp16(DBL_CHANCE, 255, amt);
+
+  // starts on the first chaos palette: sin8 is at its floor a quarter turn back
+  uint8_t sway = sin8((uint8_t)(e * 256 / CHAOS_SWAY_MS) + 192);
+  chaosColour(sway, amt);
 }
 
 #else
