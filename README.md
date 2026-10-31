@@ -174,19 +174,20 @@ Four presets — Distant storm, Rolling, Direct hit, Heat lightning — are star
 
 ## Export
 
-The **Export** panel emits seven source files plus the layout. They are split along the line of **ownership**, not by size — which is what makes re-exporting safe:
+The **Export** panel emits eight source files plus the layout. They are split along the line of **ownership**, not by size — which is what makes re-exporting safe:
 
 | File | Owner | Overwritten on export |
 |---|---|---|
 | `config.h` | **you** — pins, logging, palettes | never; the bench emits it as a starter only |
 | `controls.h` | **you** — keyboard controls, chaos button | never; starter only |
+| `sound.h` | **you** — thunder from a DFPlayer Mini | never; starter only |
 | `layout.h` | generator — segments, `LED_X`/`LED_Y` | wholesale |
 | `tuning.h` | generator — animation parameters | wholesale |
 | `storm.h` | generator — the engine: renders each frame into `leds[]` | wholesale |
 | `strip.h` | generator — the output: brightness, white balance, power cap, the wire | wholesale |
 | `main.cpp` | generator — `setup()` / `loop()` | wholesale |
 
-Drop the five generated files into `src/` after any export; leave your `config.h` and `controls.h` alone.
+Drop the five generated files into `src/` after any export; leave your `config.h`, `controls.h` and `sound.h` alone.
 
 **The colour math is FastLED's; the driver is not.** `storm.h` uses FastLED's `lib8tion`, `CRGB` and `hsv2rgb_rainbow`, because the bench transcribes them bit for bit. `strip.h` sends the frame with Adafruit NeoPixel. FastLED 3.10's ESP32 output lit the right number of pixels on this board, but every colour came out white; NeoPixel on the same board and strand showed the colours correctly. FastLED is pinned in `platformio.ini` so the math cannot drift under the bench.
 
@@ -276,6 +277,7 @@ There are no knobs. Palette, speed, cloud speed and level are set from the keybo
 | `+` `-` | step it up or down; past either end it wraps to the other (`=` and `_` work too, so shift is optional) |
 | `h` | hold mode on/off: one segment lit steady, the storm paused |
 | `0`–`6` | while holding, the segment to light, in the order the boot banner lists them (0 is the cloud body) |
+| `t` | a thunder file now, for testing the sound |
 
 Each change prints a `[keys]` line with the new value, and the dashboard line follows. The keys need `STORM_LOG 1`, which is what opens the serial port; without it the settings stay at their start values.
 
@@ -309,6 +311,34 @@ The envelope runs in **real** milliseconds while the strikes it schedules run on
 
 The scheduler's gap and double-strike settings became runtime values to make this work, which is a down payment on the severity crossfade — that will drive the same three.
 
+The colour changes too: the sky crossfades to the chaos palettes, `tornado` and `wisp`, sways between them, and fades back into the palette cycle with the decay.
+
+## Sound
+
+Thunder from a **DFPlayer Mini** (`sound.h`). It plays one file at a time, so the sounds take turns rather than layering: the cloud's rumble plays until a strike's thunder interrupts it, and comes back when the thunder ends. Thunder files that fade out into a low rumble make the hand-back hard to hear.
+
+The microSD card (FAT32) has one folder per kind of sound, and each play picks a file at random from its folder, never the same one twice running:
+
+```
+/01/001.mp3 ...   ambient: the cloud's rumble, the steady state
+/02/001.mp3 ...   strikes: thunder, one per strike
+/03/001.mp3 ...   chaos: the chaos button
+```
+
+Each name starts with three digits, from `001` with no gaps; anything after the digits is ignored, so `001 close crack.mp3` works. Set `SOUND_AMBIENT_FILES`, `SOUND_STRIKE_FILES` and `SOUND_CHAOS_FILES` in `config.h` to the counts, and `SOUND_CLIP_MS` to the clips' length (all the same, 5 s). The project's `audio/` folder holds the card's files in the same layout, git-ignored; [audio/README.md](audio/README.md) covers copying them to the card.
+
+| DFPlayer | ESP32 |
+|---|---|
+| VCC | 5 V |
+| GND | GND |
+| RX | `GPIO26`, through a 1 kΩ resistor |
+| TX | `GPIO25` — the module's errors and status, for the `[sound]` log; playback works without it |
+| SPK1 / SPK2 | a speaker of 3 W or less, straight across |
+
+Put a 100–470 µF capacitor across VCC and GND at the module; the strip's current spikes otherwise come through the speaker as clicks.
+
+Each strike's thunder waits a random 0.3–2 s, the way sound lags light, which reads as a storm at varying distances. A clip is longer than the gap between strikes, so a new one only cuts in once the last has played 4 s (`THUNDER_HOLD_MS`). Chaos plays one of its own clips at once, and no strike cuts it off. The board times each clip from `SOUND_CLIP_MS` and starts the ambient rumble again when it is up, so playback does not depend on the module reporting back. Volume (`SOUND_VOLUME`, out of 30) follows the level setting down. Sound draws from Arduino's `random()`, not `random16()`, so the storm still replays the bench's seed exactly. `SOUND_ENABLE 0` compiles it all out, library included. Each file played prints a `[sound]` line.
+
 ## Severity and the presets
 
 Worth recording, because the obvious mapping is wrong: **the four bench presets are not one axis.** Distant storm → Rolling → Direct hit is a genuine severity ladder, with Rolling in the middle. Heat lightning is not on it — that is cloud-only sheet lightning with no channel strikes, a different *kind* of storm rather than a milder one. It belongs with the palette setting.
@@ -323,7 +353,7 @@ pio run -t upload       # flash
 pio device monitor      # watch the log (and feed the live dashboard, if running)
 ```
 
-`platformio.ini` targets `esp32dev`. Re-exporting overwrites five of the seven source files, but never `config.h` or `controls.h` — so your pin choice, logging settings, palettes and controls survive.
+`platformio.ini` targets `esp32dev`. Re-exporting overwrites five of the eight source files, but never `config.h`, `controls.h` or `sound.h` — so your pin choice, logging settings, palettes, controls and sound survive.
 
 ## Files
 
@@ -341,12 +371,14 @@ lightning-simulator/
 │   ├── firmware.js   reads segments, palettes, speed and level steps out of src/
 │   ├── fake-bench.js pretend board for working without hardware
 │   └── public/       index.html, plus parse.js and state.js shared with the service
+├── audio/            the DFPlayer's microSD card, same layout; git-ignored but for its README
 ├── docs/
 │   ├── wiring-esp32.svg       full wiring diagram, DevKit V1 pinout
 │   └── wiring-esp32.py        regenerates the SVG
 └── src/
     ├── config.h      YOURS: pins, logging, palettes — never regenerated
     ├── controls.h    YOURS: keyboard controls, chaos button — never regenerated
+    ├── sound.h       YOURS: thunder from a DFPlayer Mini — never regenerated
     ├── layout.h      generated: segment table, pixel coordinates
     ├── tuning.h      generated: animation parameters and palette
     ├── storm.h       generated: the engine, renders each frame into leds[]

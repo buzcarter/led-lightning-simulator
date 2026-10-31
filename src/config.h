@@ -32,6 +32,24 @@
 #define MAX_STRIKES  6
 #define MAX_STROKES  6
 
+/* ── sound ──────────────────────────────────────────────────── */
+/* The DFPlayer Mini; how it is used is in sound.h. The microSD card holds
+   three folders, numbered files in each:
+
+     /01/001.mp3 ...   ambient: the cloud's rumble, whenever nothing else plays
+     /02/001.mp3 ...   strikes: thunder, one per strike
+     /03/001.mp3 ...   chaos: the chaos button
+
+   Every clip runs SOUND_CLIP_MS. The board times them itself rather than
+   waiting to hear the module say a clip has finished. */
+#define SOUND_TX_PIN         GPIO_NUM_26   // to the DFPlayer's RX, through 1 kΩ
+#define SOUND_RX_PIN         GPIO_NUM_25   // from the DFPlayer's TX; for the log only
+#define SOUND_AMBIENT_FILES  10            // how many files in /01
+#define SOUND_STRIKE_FILES   10            // how many files in /02
+#define SOUND_CHAOS_FILES    2             // how many files in /03
+#define SOUND_CLIP_MS        5000          // the length of every clip
+#define SOUND_VOLUME         24            // 0..30, at the top level step
+
 /* ── logging ────────────────────────────────────────────────── */
 /* 0 removes Serial and the format strings entirely — about 28 KB of
    flash on an ESP32.

@@ -2,7 +2,8 @@
 # Generates docs/wiring-esp32.svg. Run: python3 wiring.py <out.svg>
 import sys
 
-W, H = 1560, 1130
+OX = 200                     # the DFPlayer's room, left of everything else
+W, H = 1560 + OX, 1130
 out = []
 def add(s): out.append(s)
 
@@ -47,8 +48,8 @@ LEFT = [  # silkscreen, tag text, kind
     ("D35", "GPIO35", "in"),
     ("D32", "GPIO32", "io"),
     ("D33", "GPIO33", "io"),
-    ("D25", "GPIO25", "io"),
-    ("D26", "GPIO26", "io"),
+    ("D25", "GPIO25", "sound"),
+    ("D26", "GPIO26", "sound"),
     ("D27", "GPIO27", "chaos"),
     ("D14", "GPIO14", "io"),
     ("D12", "GPIO12", "io"),
@@ -83,12 +84,12 @@ add('''<title>StormCloud wiring: ESP32 DevKit V1</title>
   svg{--bg:#fbfaf7;--ink:#1d2024;--ink2:#5a6068;--ink3:#8d939b;--rule:#d9d6cf;
       --board:#1f2328;--board-ink:#e9ecef;--module:#c9ccd1;--module-ink:#2a2e33;
       --v33:#c8463a;--v5:#d07a12;--gnd:#30343a;
-      --chaos:#b3811c;--strip:#3f8f5a;--io:#9aa0a8}
+      --chaos:#b3811c;--strip:#3f8f5a;--sound:#6b5bc4;--io:#9aa0a8}
   @media (prefers-color-scheme: dark){
     svg{--bg:#15181c;--ink:#e8eaed;--ink2:#a2a9b2;--ink3:#6e757e;--rule:#30353b;
         --board:#0c0e10;--board-ink:#d8dce0;--module:#3a3f46;--module-ink:#e0e3e6;
         --v33:#ef7466;--v5:#f0a243;--gnd:#b7bec6;
-        --chaos:#e0b14f;--strip:#68ba84;--io:#6e757e}}
+        --chaos:#e0b14f;--strip:#68ba84;--sound:#a294f0;--io:#6e757e}}
   .bg{fill:var(--bg)}
   text{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;fill:var(--ink)}
   .h1{font-family:system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:26px;font-weight:700}
@@ -124,21 +125,24 @@ add(f'<rect class="bg" width="{W}" height="{H}"/>')
 text(30, 46, "StormCloud wiring · ESP32 DevKit V1 (30-pin)", "h1")
 text(30, 70, "Top view, USB at the bottom. Pin order matches the board silkscreen. Pins in colour are used; grey are free.", "h2")
 
+add(f'<g transform="translate({OX},0)">')
+
 # ── keyboard: the settings come over USB, not from parts on the board ──
-KX, KY, KW = 60, 180, 440
-add(f'<rect class="card" x="{KX}" y="{KY}" width="{KW}" height="236" rx="8"/>')
+KX, KY, KW = -140, 96, 440
+add(f'<rect class="card" x="{KX}" y="{KY}" width="{KW}" height="266" rx="8"/>')
 text(KX + 20, KY + 32, "CONTROLS", "ttl")
 text(KX + 124, KY + 32, "keyboard, over the USB cable", "note")
 keys = [("p  s  c  l", "palette, speed, cloud speed, level"),
         ("+  -", "step it; wraps past either end"),
         ("h", "hold: one segment lit, storm paused"),
-        ("0 – 6", "while holding, the segment to light")]
+        ("0 – 6", "while holding, the segment to light"),
+        ("t", "a thunder file now: sound test")]
 for k, (key, what) in enumerate(keys):
     y = KY + 70 + k * 30
     text(KX + 20, y, key, "val")
     text(KX + 130, y, what, "t")
-text(KX + 20, KY + 196, "Type into pio device monitor. Each change prints", "note")
-text(KX + 20, KY + 212, "a [keys] line, and the dashboard follows.", "note")
+text(KX + 20, KY + 226, "Type into pio device monitor. Each change prints", "note")
+text(KX + 20, KY + 242, "a [keys] line, and the dashboard follows.", "note")
 
 # ── board ──────────────────────────────────────────────────────
 add(f'<rect class="board" x="{BX0}" y="{BY0}" width="{BX1-BX0}" height="{BY1-BY0}" rx="14"/>')
@@ -169,7 +173,7 @@ add('<rect x="775" y="852" width="50" height="42" rx="4" fill="#b8bdc3" stroke="
 text(800, 845, "micro-USB", "silk-s", "middle")
 
 TAGFILL = {"v33": "var(--v33)", "v5": "var(--v5)", "gnd": "var(--gnd)",
-           "chaos": "var(--chaos)", "strip": "var(--strip)"}
+           "chaos": "var(--chaos)", "strip": "var(--strip)", "sound": "var(--sound)"}
 
 def tag(x0, x1, y, label, kind):
     col = TAGFILL.get(kind)
@@ -207,6 +211,71 @@ line(CX, yc + 53, CX, yc + 72, "w"); gnd(CX, yc + 72)
 text(CX - 36, yc + 28, "CHAOS", "ttl", "end")
 text(CX - 36, yc + 44, "momentary", "note", "end")
 text(CX - 36, yc + 58, "to GND, no resistor", "note", "end")
+
+# ── DFPlayer Mini ──────────────────────────────────────────────
+# Top view, as the module is printed: both 8-pin headers in their real order,
+# silkscreen inside the board. Its RX and TX sit on the far side from the
+# ESP32, so the two data wires wrap over the top. Going round a corner swaps
+# which wire is on the outside, so the upper pin on the ESP32 (D25) has to
+# take the outer loop and land on the lower pin here (TX), and D26 the inner
+# loop onto RX. Any other pairing crosses.
+DX0, DX1, DY0, DY1 = -60, 240, 450, 750
+def dy(k): return 480 + 36 * k
+DL = ["VCC", "RX", "TX", "DAC_R", "DAC_L", "SPK_1", "GND", "SPK_2"]
+DR = ["BUSY", "USB -", "USB +", "ADKEY_2", "ADKEY_1", "IO_2", "GND", "IO_1"]
+USED = {("L", "VCC"), ("L", "RX"), ("L", "TX"), ("L", "SPK_1"), ("L", "SPK_2"), ("R", "GND")}
+
+# data first, so the board and its pins draw over the wire ends
+yd25, yd26 = py(7), py(8)
+yRX, yTX = dy(1), dy(2)
+add(f'<path class="w" d="M{TAGL0},{yd25} L290,{yd25} L290,380 L-114,380 L-114,{yTX} L{DX0},{yTX}" style="stroke:var(--sound)"/>')
+add(f'<path class="w" d="M{TAGL0},{yd26} L270,{yd26} L270,396 L-96,396 L-96,{yRX} L{DX0},{yRX}" style="stroke:var(--sound)"/>')
+res_h(440, yd26, "1 kΩ")
+text(440, yd25 - 8, "status, errors →", "note", "middle")
+
+add(f'<rect class="board" x="{DX0}" y="{DY0}" width="{DX1-DX0}" height="{DY1-DY0}" rx="6"/>')
+text((DX0 + DX1) / 2, 476, "DFPlayer Mini", "silk", "middle")
+for k, x in enumerate([20, 30, 40, 140, 150, 160]):     # the row of SMD parts along the top edge
+    add(f'<rect x="{x}" y="456" width="6" height="9" rx="1" fill="#b8bdc3"/>')
+# microSD slot: the card goes in from the bottom edge
+add(f'<rect class="module" x="14" y="512" width="152" height="196" rx="3"/>')
+add('<rect x="26" y="524" width="128" height="150" rx="2" fill="none" stroke="var(--module-ink)" stroke-width="1" opacity=".5"/>')
+for x in (52, 76):
+    add(f'<rect x="{x}" y="546" width="5" height="36" rx="1" fill="var(--module-ink)" opacity=".55"/>')
+add('<path d="M126,600 h18 v58 h-10 v20 h-8 z" fill="none" stroke="var(--module-ink)" stroke-width="1.5" opacity=".6"/>')
+text(90, 696, "microSD", "module-t", "middle")
+for k, (l, r) in enumerate(zip(DL, DR)):
+    y = dy(k)
+    for x, lab, side in ((DX0, l, "L"), (DX1, r, "R")):
+        used = (side, lab) in USED
+        fill = 'fill="#c9a74a" stroke="#7d6420"' if used else 'fill="#6b7179" stroke="#4a5058"'
+        add(f'<rect x="{x-6}" y="{y-6}" width="12" height="12" rx="2" {fill}/>')
+        cls = "silk" if used else "silk-s"
+        if side == "L": text(x + 12, y + 4.5, lab, cls)
+        else:           text(x - 12, y + 4.5, lab, cls, "end")
+text(90, 772, "card: /01 ambient, /02 strikes, /03 chaos", "note", "middle")
+text(90, 788, "grey pins unused; either GND will do", "note", "middle")
+
+# power: VCC up to a +5V flag inside the loop of data wires
+add(f'<path class="v5" d="M{DX0},{dy(0)} L-78,{dy(0)} L-78,428" style="fill:none"/>')
+flag(-78, 428, "+5V", "v5")
+# ground from the right-hand GND, with the reservoir cap across 5 V beside it
+yg = dy(6)
+line(DX1, yg, 300, yg); line(300, 648, 300, 762); gnd(300, 762)
+add('<path class="v5" d="M300,620 L300,640" style="fill:none"/>')
+flag(300, 620, "+5V", "v5")
+line(288, 640, 312, 640, "plate"); line(288, 648, 312, 648, "plate")
+text(318, 660, "220 µF", "val")
+dot(300, yg)
+
+# speaker on SPK_1 / SPK_2, to the left
+y1, y2 = dy(5), dy(7)
+add(f'<path class="w" d="M{DX0},{y1} L-142,{y1} L-142,680"/>')
+add(f'<path class="w" d="M{DX0},{y2} L-142,{y2} L-142,712"/>')
+add('<rect class="part" x="-150" y="680" width="16" height="32" rx="1"/>')
+add('<path class="part" d="M-150,680 L-168,662 L-168,730 L-150,712 Z"/>')
+text(-168, 770, "SPEAKER", "ttl")
+text(-168, 786, "3 W or less", "note")
 
 # left GND and VIN
 yg_ = py(13)
@@ -274,11 +343,14 @@ text(1044, 576, "Not D2: it also drives", "note")
 text(1044, 590, "the blue on-board LED,", "note")
 text(1044, 604, "which loads the data line.", "note")
 
+add('</g>')
+
 # ── legend ─────────────────────────────────────────────────────
 LY = 930
 add(f'<line x1="30" y1="{LY-20}" x2="{W-30}" y2="{LY-20}" stroke="var(--rule)" stroke-width="1"/>')
 items = [("var(--chaos)", "Chaos button: D27"),
          ("var(--strip)", "Strip data: D18"),
+         ("var(--sound)", "DFPlayer: D26 out, D25 in"),
          ("var(--v5)", "5 V"), ("var(--gnd)", "Ground")]
 x = 30
 for col, lab in items:
@@ -292,6 +364,7 @@ text(60, LY + 58, "Every ground symbol joins a GND pin. Both GND pins on the boa
 notes = [
     "No knobs: palette, speed, cloud speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.",
     "Strip data is 3.3 V into a 5 V strip. Short runs usually work. If the first pixel glitches, add a 74AHCT125 level shifter before the 330 Ω.",
+    "DFPlayer: the 1 kΩ on its RX keeps the hiss down. Its TX back to D25 carries its errors to the log.",
     "EN resets the board. Hold BOOT while tapping EN to force the flasher, only if an upload will not start on its own.",
 ]
 for k, n in enumerate(notes):

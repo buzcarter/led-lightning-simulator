@@ -3,11 +3,13 @@
 
    Two inputs: the chaos button on the board, and keys typed into the
    serial monitor on a tethered computer. Palette, speed, cloud speed and
-   level are set from the keyboard; there are no knobs.
+   level are set from the keyboard; there are no knobs. The thunder in
+   sound.h is driven from here too.
    ───────────────────────────────────────────────────────────── */
 #pragma once
 #include <Arduino.h>
 #include "storm.h"
+#include "sound.h"
 
 /* ── settings ───────────────────────────────────────────────── */
 /* Speed steps, 8.8 fixed point, one per step. Geometric, because equal
@@ -124,6 +126,7 @@ void chaosFire(uint32_t realNow, uint32_t stormNow) {
     k++;
   }
   LOG("[storm] CHAOS -- %u channels\n", (unsigned)k);
+  soundChaos(realNow);
 }
 
 /* Back to the settings at once, wherever the envelope was. */
@@ -207,6 +210,7 @@ inline void chaosPoll(uint32_t, uint32_t) {}
              (= and _ work too, so shift is optional)
      h       hold mode on/off: one segment lit steady, the storm paused
      0-9     while holding, the segment to light, in SEGMENTS[] order
+     t       a thunder file now, for testing the sound
 
    Each change prints the new value, and the dashboard line follows. Needs
    STORM_LOG, which is what opens the serial port; without it the settings
@@ -259,7 +263,8 @@ static void keyStep(int8_t dir) {
 }
 
 void controlsBegin() {
-  LOG("[keys]  p s c l pick palette, speed, cloud or level; + - step it; h hold, then 0-%u\n",
+  soundBegin();
+  LOG("[keys]  p s c l pick palette, speed, cloud or level; + - step it; h hold, then 0-%u; t thunder\n",
       (unsigned)(NUM_SEGMENTS - 1));
 }
 
@@ -273,6 +278,7 @@ static void keysPoll() {
       case 'l': keySetting = SET_LEVEL;   break;
       case '+': case '=': keyStep(+1); continue;
       case '-': case '_': keyStep(-1); continue;
+      case 't': soundTest(); continue;
       case 'h':
         if (!g_hold) chaosCancel();          // so hold shows the level setting's brightness
         holdSet(!g_hold);
@@ -287,12 +293,13 @@ static void keysPoll() {
 }
 
 #else
-inline void controlsBegin() {}
+inline void controlsBegin() { soundBegin(); }
 static inline void keysPoll() {}
 #endif
 
-/* Once a frame: keys from the monitor, then the palette cycle. */
+/* Once a frame: keys from the monitor, the palette cycle, then the sound. */
 void controlsUpdate(uint32_t realNow) {
   keysPoll();
   paletteCycle(realNow);
+  soundUpdate(realNow);
 }

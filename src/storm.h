@@ -123,6 +123,10 @@ struct Strike {
 };
 Strike strikes[MAX_STRIKES];
 uint32_t nextStrikeAt = 700;
+
+/* Told of each strike the scheduler fires, for anything that follows the
+   storm without being part of it: sound.h sets it to start the thunder. */
+void (*g_onStrike)() = nullptr;
 uint16_t frameNo = 0;
 
 void makeStrike(uint8_t slot, uint8_t segIdx, uint32_t t0) {
@@ -396,6 +400,7 @@ void scheduleStrikes(uint32_t now) {
   if (n) {
     uint8_t pick = rndR(0, n);
     trigger(bolts[pick], now);
+    if (g_onStrike) g_onStrike();
     if (random8() < g_dblChance && n > 1) {          // a second, different channel
       uint8_t other = rndR(0, n);
       if (other == pick) other = (other + 1) % n;
