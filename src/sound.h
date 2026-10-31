@@ -6,11 +6,16 @@
    a strike's thunder interrupts it, and comes back when the thunder ends.
    Chaos plays one of its own clips at once and keeps it to the end.
 
-   Pins, file counts, clip length and volume are in config.h, with the
-   card's layout. Each name on the card starts with three digits, from 001
-   with no gaps; anything after them is ignored, so "001 close crack.mp3"
-   is fine. Each play picks one at random from its folder. audio/ in the
-   project holds the card's files, laid out the same way.
+   Pins, clip length and volume are in config.h, with the card's layout.
+   Each name on the card starts with three digits, from 001 with no gaps;
+   anything after them is ignored, so "001 close crack.mp3" is fine. Each
+   play picks one at random from its folder. The board asks the module how
+   many files each folder holds when the card is ready, so adding a clip
+   needs no re-flash; config.h's counts stand in for any folder it cannot
+   read. audio/ in the project holds the card's files, laid out the same way.
+
+   Copying from a Mac leaves hidden ._ files beside each clip, and the
+   module counts them as clips. Run dot_clean on the card after copying.
 
    Wiring: DFPlayer VCC to 5 V and GND to the ESP32's ground. SOUND_TX_PIN
    to the DFPlayer's RX through a 1 kΩ resistor, which keeps the hiss
@@ -42,6 +47,7 @@
 
 #define SOUND_BOOT_MS     1500          // the module reading its card after power on
 #define SOUND_CMD_GAP_MS  60            // the module drops commands sent closer than this
+#define SOUND_ASK_MS      250           // how long to wait on each folder's count
 
 enum SoundFolder : uint8_t { SND_AMBIENT = 1, SND_STRIKE = 2, SND_CHAOS = 3 };
 
@@ -56,6 +62,7 @@ static uint32_t soundCmdAt = 0;            // millis of the last command of any 
 static uint32_t thunderAt = 0;             // a strike's thunder, due then; 0 = none
 static uint8_t  soundVol = 255;            // what the module was last told
 static uint8_t  soundLast[4] = {0};        // the last file per folder, to avoid repeats
+static uint8_t  soundFiles[4] = {0, SOUND_AMBIENT_FILES, SOUND_STRIKE_FILES, SOUND_CHAOS_FILES};
 
 /* Arduino's random(), not random16(): the storm's draws must stay the
    bench's, so the same seed replays the same storm. */
@@ -66,9 +73,24 @@ static uint8_t pickFile(SoundFolder f, uint8_t n) {
   return k;
 }
 
+/* Asks the module for each folder's file count, waiting up to SOUND_ASK_MS
+   on each: run once the card is ready, before the first rumble, so the
+   wait stalls nothing anyone is watching. A folder with no answer, or a
+   nonsense one, keeps config.h's count. */
+static void soundCount() {
+  static const uint8_t fallback[4] = {0, SOUND_AMBIENT_FILES, SOUND_STRIKE_FILES, SOUND_CHAOS_FILES};
+  for (uint8_t f = SND_AMBIENT; f <= SND_CHAOS; f++) {
+    int n = dfp.readFileCountsInFolder(f);
+    bool ok = n > 0 && n <= 255;
+    soundFiles[f] = ok ? (uint8_t)n : fallback[f];
+    if (soundLast[f] > soundFiles[f]) soundLast[f] = 0;
+    LOG("[sound] /%02u: %u files%s\n", (unsigned)f, (unsigned)soundFiles[f],
+        ok ? "" : ", from config.h: no answer from the module");
+  }
+}
+
 static void soundPlay(SoundFolder f, uint32_t realNow, const char *why) {
-  uint8_t n = f == SND_AMBIENT ? SOUND_AMBIENT_FILES
-            : f == SND_STRIKE  ? SOUND_STRIKE_FILES : SOUND_CHAOS_FILES;
+  uint8_t n = soundFiles[f];
   if (!n) return;
   uint8_t k = pickFile(f, n);
   dfp.playFolder(f, k);
@@ -103,7 +125,8 @@ void soundTest() {
 /* Everything the module says, in words. Its TX back to SOUND_RX_PIN is the
    only way to see it, so silence here with the module powered means that
    wire, or the module is not running at all. Playback does not depend on
-   it: clips are timed from SOUND_CLIP_MS. */
+   it: clips are timed from SOUND_CLIP_MS, and without it the file counts
+   come from config.h. */
 static void soundReport(uint8_t type, uint16_t value) {
   switch (type) {
     case DFPlayerCardOnline:   LOG("[sound] card ready\n"); break;
@@ -128,11 +151,12 @@ static void soundReport(uint8_t type, uint16_t value) {
 void soundBegin() {
   Serial2.begin(9600, SERIAL_8N1, SOUND_RX_PIN, SOUND_TX_PIN);
   dfp.begin(Serial2, false, false);    // no ACK and no reset, so nothing here blocks a frame
+  dfp.setTimeOut(SOUND_ASK_MS);
   soundCmdAt = millis();
   g_onStrike = soundStrike;
-  LOG("[sound] DFPlayer on GPIO%u (TX) / GPIO%u (RX), %u ambient + %u strike + %u chaos clips of %u ms\n",
-      (unsigned)SOUND_TX_PIN, (unsigned)SOUND_RX_PIN, (unsigned)SOUND_AMBIENT_FILES,
-      (unsigned)SOUND_STRIKE_FILES, (unsigned)SOUND_CHAOS_FILES, (unsigned)SOUND_CLIP_MS);
+  LOG("[sound] DFPlayer on GPIO%u (TX) / GPIO%u (RX), clips of %u ms; until the card answers, %u ambient + %u strike + %u chaos\n",
+      (unsigned)SOUND_TX_PIN, (unsigned)SOUND_RX_PIN, (unsigned)SOUND_CLIP_MS,
+      (unsigned)SOUND_AMBIENT_FILES, (unsigned)SOUND_STRIKE_FILES, (unsigned)SOUND_CHAOS_FILES);
 }
 
 /* Once a frame. At most one command goes out per call, spaced by
@@ -157,8 +181,12 @@ void soundUpdate(uint32_t realNow) {
   if (thunderAt && (int32_t)(realNow - thunderAt) >= 0) {
     thunderAt = 0;
     soundPlay(SND_STRIKE, realNow, "strike");
-  } else if (!soundStarted || ended) {
+  } else if (!soundStarted) {
+    soundCount();                                 // the card is ready: see what is on it
     soundStarted = true;
+    soundCmdAt = millis();
+    soundAt = soundCmdAt - SOUND_CLIP_MS;         // nothing is playing: the rumble goes out next frame
+  } else if (ended) {
     soundPlay(SND_AMBIENT, realNow, "ambient");   // a fresh pick each time
   }
 }

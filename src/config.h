@@ -41,12 +41,16 @@
      /03/001.mp3 ...   chaos: the chaos button
 
    Every clip runs SOUND_CLIP_MS. The board times them itself rather than
-   waiting to hear the module say a clip has finished. */
+   waiting to hear the module say a clip has finished.
+
+   The board reads how many files each folder holds from the card at start
+   up, so adding a clip needs no re-flash. The counts below are only used
+   for a folder it cannot read, as when the RX wire is off. */
 #define SOUND_TX_PIN         GPIO_NUM_26   // to the DFPlayer's RX, through 1 kΩ
-#define SOUND_RX_PIN         GPIO_NUM_25   // from the DFPlayer's TX; for the log only
-#define SOUND_AMBIENT_FILES  10            // how many files in /01
-#define SOUND_STRIKE_FILES   10            // how many files in /02
-#define SOUND_CHAOS_FILES    2             // how many files in /03
+#define SOUND_RX_PIN         GPIO_NUM_25   // from the DFPlayer's TX; the log and the file counts
+#define SOUND_AMBIENT_FILES  10            // files in /01, if the card does not say
+#define SOUND_STRIKE_FILES   10            // files in /02, if the card does not say
+#define SOUND_CHAOS_FILES    9             // files in /03, if the card does not say
 #define SOUND_CLIP_MS        5000          // the length of every clip
 #define SOUND_VOLUME         24            // 0..30, at the top level step
 
