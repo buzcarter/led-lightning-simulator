@@ -320,24 +320,24 @@ Thunder from a **DFPlayer Mini** (`sound.h`). It plays one file at a time, so th
 The microSD card (FAT32) has one folder per kind of sound, and each play picks a file at random from its folder, never the same one twice running:
 
 ```
-/01/001.mp3 ...   cloud rumble, the steady state
-/02/001.mp3 ...   thunder, one per strike
-/03/001.mp3 ...   chaos
+/01/001.mp3 ...   ambient: the cloud's rumble, the steady state
+/02/001.mp3 ...   strikes: thunder, one per strike
+/03/001.mp3 ...   chaos: the chaos button
 ```
 
-Each name starts with three digits, from `001` with no gaps; anything after the digits is ignored, so `001 close crack.mp3` works. Set `SOUND_CLOUD_FILES`, `SOUND_THUNDER_FILES` and `SOUND_CHAOS_FILES` in `sound.h` to the counts. The project's `audio/` folder holds the card's files in the same layout, git-ignored; [audio/README.md](audio/README.md) covers copying them to the card.
+Each name starts with three digits, from `001` with no gaps; anything after the digits is ignored, so `001 close crack.mp3` works. Set `SOUND_AMBIENT_FILES`, `SOUND_STRIKE_FILES` and `SOUND_CHAOS_FILES` in `config.h` to the counts, and `SOUND_CLIP_MS` to the clips' length (all the same, 5 s). The project's `audio/` folder holds the card's files in the same layout, git-ignored; [audio/README.md](audio/README.md) covers copying them to the card.
 
 | DFPlayer | ESP32 |
 |---|---|
 | VCC | 5 V |
 | GND | GND |
 | RX | `GPIO26`, through a 1 kΩ resistor |
-| TX | `GPIO25` — how the board hears a file finish; without it the rumble plays once and stops |
+| TX | `GPIO25` — the module's errors and status, for the `[sound]` log; playback works without it |
 | SPK1 / SPK2 | a speaker of 3 W or less, straight across |
 
 Put a 100–470 µF capacitor across VCC and GND at the module; the strip's current spikes otherwise come through the speaker as clicks.
 
-Each strike's thunder waits a random 0.3–2 s, the way sound lags light, which reads as a storm at varying distances. A thunder file is longer than the gap between strikes, so a new one only cuts in once the last has played 4 s (`THUNDER_HOLD_MS`). Chaos cuts in at once. Volume (`SOUND_VOLUME`, out of 30) follows the level setting down. Sound draws from Arduino's `random()`, not `random16()`, so the storm still replays the bench's seed exactly. `SOUND_ENABLE 0` compiles it all out, library included. Each file played prints a `[sound]` line.
+Each strike's thunder waits a random 0.3–2 s, the way sound lags light, which reads as a storm at varying distances. A clip is longer than the gap between strikes, so a new one only cuts in once the last has played 4 s (`THUNDER_HOLD_MS`). Chaos plays one of its own clips at once, and no strike cuts it off. The board times each clip from `SOUND_CLIP_MS` and starts the ambient rumble again when it is up, so playback does not depend on the module reporting back. Volume (`SOUND_VOLUME`, out of 30) follows the level setting down. Sound draws from Arduino's `random()`, not `random16()`, so the storm still replays the bench's seed exactly. `SOUND_ENABLE 0` compiles it all out, library included. Each file played prints a `[sound]` line.
 
 ## Severity and the presets
 

@@ -252,7 +252,7 @@
 <path class="w" d="M572,526 L270,526 L270,396 L-96,396 L-96,516 L-60,516" style="stroke:var(--sound)"/>
 <rect class="part" x="414.0" y="518" width="52" height="16" rx="2"/>
 <text class="val" x="440" y="513" text-anchor="middle">1 kΩ</text>
-<text class="note" x="440" y="476" text-anchor="middle">track finished →</text>
+<text class="note" x="440" y="476" text-anchor="middle">status, errors →</text>
 <rect class="board" x="-60" y="450" width="300" height="300" rx="6"/>
 <text class="silk" x="90.0" y="476" text-anchor="middle">DFPlayer Mini</text>
 <rect x="20" y="456" width="6" height="9" rx="1" fill="#b8bdc3"/>
@@ -299,7 +299,7 @@
 <text class="silk" x="-48" y="736.5" text-anchor="start">SPK_2</text>
 <rect x="234" y="726" width="12" height="12" rx="2" fill="#6b7179" stroke="#4a5058"/>
 <text class="silk-s" x="228" y="736.5" text-anchor="end">IO_1</text>
-<text class="note" x="90" y="772" text-anchor="middle">card: /01 /02 /03, see audio/README.md</text>
+<text class="note" x="90" y="772" text-anchor="middle">card: /01 ambient, /02 strikes, /03 chaos</text>
 <text class="note" x="90" y="788" text-anchor="middle">grey pins unused; either GND will do</text>
 <path class="v5" d="M-60,480 L-78,480 L-78,428" style="fill:none"/>
 <line class="v5" x1="-89" y1="428" x2="-67" y2="428"/>
@@ -402,6 +402,6 @@
 <text class="t" x="60" y="988" text-anchor="start">Every ground symbol joins a GND pin. Both GND pins on the board are the same net.</text>
 <text class="note" x="30" y="1018" text-anchor="start">No knobs: palette, speed, cloud speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.</text>
 <text class="note" x="30" y="1036" text-anchor="start">Strip data is 3.3 V into a 5 V strip. Short runs usually work. If the first pixel glitches, add a 74AHCT125 level shifter before the 330 Ω.</text>
-<text class="note" x="30" y="1054" text-anchor="start">DFPlayer: the 1 kΩ on its RX keeps the hiss down. Its TX back to D25 is how the board hears a track finish; without it the rumble plays once.</text>
+<text class="note" x="30" y="1054" text-anchor="start">DFPlayer: the 1 kΩ on its RX keeps the hiss down. Its TX back to D25 carries its errors to the log.</text>
 <text class="note" x="30" y="1072" text-anchor="start">EN resets the board. Hold BOOT while tapping EN to force the flasher, only if an upload will not start on its own.</text>
 </svg>

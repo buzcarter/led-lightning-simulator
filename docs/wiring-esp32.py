@@ -231,7 +231,7 @@ yRX, yTX = dy(1), dy(2)
 add(f'<path class="w" d="M{TAGL0},{yd25} L290,{yd25} L290,380 L-114,380 L-114,{yTX} L{DX0},{yTX}" style="stroke:var(--sound)"/>')
 add(f'<path class="w" d="M{TAGL0},{yd26} L270,{yd26} L270,396 L-96,396 L-96,{yRX} L{DX0},{yRX}" style="stroke:var(--sound)"/>')
 res_h(440, yd26, "1 kΩ")
-text(440, yd25 - 8, "track finished →", "note", "middle")
+text(440, yd25 - 8, "status, errors →", "note", "middle")
 
 add(f'<rect class="board" x="{DX0}" y="{DY0}" width="{DX1-DX0}" height="{DY1-DY0}" rx="6"/>')
 text((DX0 + DX1) / 2, 476, "DFPlayer Mini", "silk", "middle")
@@ -253,7 +253,7 @@ for k, (l, r) in enumerate(zip(DL, DR)):
         cls = "silk" if used else "silk-s"
         if side == "L": text(x + 12, y + 4.5, lab, cls)
         else:           text(x - 12, y + 4.5, lab, cls, "end")
-text(90, 772, "card: /01 /02 /03, see audio/README.md", "note", "middle")
+text(90, 772, "card: /01 ambient, /02 strikes, /03 chaos", "note", "middle")
 text(90, 788, "grey pins unused; either GND will do", "note", "middle")
 
 # power: VCC up to a +5V flag inside the loop of data wires
@@ -364,7 +364,7 @@ text(60, LY + 58, "Every ground symbol joins a GND pin. Both GND pins on the boa
 notes = [
     "No knobs: palette, speed, cloud speed and level are set from the computer's keyboard through the serial monitor, over the same USB cable.",
     "Strip data is 3.3 V into a 5 V strip. Short runs usually work. If the first pixel glitches, add a 74AHCT125 level shifter before the 330 Ω.",
-    "DFPlayer: the 1 kΩ on its RX keeps the hiss down. Its TX back to D25 is how the board hears a track finish; without it the rumble plays once.",
+    "DFPlayer: the 1 kΩ on its RX keeps the hiss down. Its TX back to D25 carries its errors to the log.",
     "EN resets the board. Hold BOOT while tapping EN to force the flasher, only if an upload will not start on its own.",
 ]
 for k, n in enumerate(notes):
