@@ -381,6 +381,7 @@ textarea.paste{
         <div class="exp-acts">
           <button class="btn tiny" id="copyCode">Copy</button>
           <button class="btn tiny" id="importJson">Import layout JSON</button>
+          <button class="btn tiny" id="layoutSvg">Download layout SVG</button>
           <span class="said" id="copySaid"></span>
         </div>
       </div>
@@ -2910,6 +2911,42 @@ document.getElementById('importJson').addEventListener('click', () => {
   } catch(e){
     alert("That did not parse as a Bolt Bench layout. Expected the JSON from the layout.json tab.");
   }
+});
+
+/* A wiring map to print or keep: every pixel at its full-precision spot on
+   the stage, coloured by run, with each run's first index and every 10th. */
+function layoutSVG(){
+  const x = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const warm = ['#d9822b', '#c2410c', '#b45309', '#e0a100', '#a16207', '#ea580c'];
+  let body = '', idx = '', bolts = 0;
+  runs.forEach(r => {
+    if (!r.drawn) return;
+    const col = r.role === 'bolt' ? warm[bolts++ % warm.length] : '#5b7fa6';
+    const end = r.start + r.drawn - 1;
+    body += `<g fill="${col}"><title>${x(r.name)} · LEDs ${r.start}–${end}</title>\n` +
+            `<path d="${x(runD(r))}" fill="none" stroke="${col}" stroke-opacity=".25" stroke-width="2"/>\n`;
+    for (let i = r.start; i <= end; i++) body += `<circle cx="${ledX[i].toFixed(1)}" cy="${ledY[i].toFixed(1)}" r="4"/>`;
+    const left = ledX[r.start] > VB.w - 220;    // near the right edge the label reads leftward
+    body += `\n<text class="run" x="${(ledX[r.start] + (left ? -8 : 8)).toFixed(1)}" y="${(ledY[r.start] - 8).toFixed(1)}"` +
+            `${left ? ' style="text-anchor:end"' : ''}>${x(r.name)} (${r.start}–${end})</text></g>\n`;
+  });
+  for (let i = 0; i < usedLeds; i += 10) idx += `<text class="idx" x="${ledX[i].toFixed(1)}" y="${(ledY[i] + 15).toFixed(1)}">${i}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VB.w} ${VB.h}" width="${VB.w}" height="${VB.h}">
+<style>text{font-family:ui-monospace,Menlo,monospace}.run{font-size:12px;font-weight:600;fill:#222}.idx{font-size:9px;fill:#777;text-anchor:middle}</style>
+<rect width="${VB.w}" height="${VB.h}" fill="#fff"/>
+${body}${idx}
+<text class="idx" x="${VB.w - 12}" y="${VB.h - 12}" style="text-anchor:end">${usedLeds}/${NUM_LEDS} pixels · Bolt Bench</text>
+</svg>
+`;
+}
+document.getElementById('layoutSvg').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([layoutSVG()], { type: 'image/svg+xml' }));
+  a.download = 'layout.svg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  document.getElementById('copySaid').textContent = 'layout.svg saved';
+  setTimeout(() => { document.getElementById('copySaid').textContent = ''; }, 2600);
 });
 
 /* ── persistence ─────────────────────────────────────────────────── */
